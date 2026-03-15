@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PYRAMID</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Load scripts in strict dependency order -->
+
+    <!-- Core state — must be first, everything reads from it -->
+    <script src="js/state.js"></script>
+
+    <!-- Rendering and input — no game-logic dependencies -->
+    <script src="js/renderer.js"></script>
+    <script src="js/input.js"></script>
+
+    <!-- Pyramid map — room.js must load before pyramid.js (defines pickRoomType) -->
+    <script src="js/pyramid/room.js"></script>
+    <script src="js/pyramid/pyramid.js"></script>
+    <script src="js/pyramid/navigation.js"></script>
+    <script src="js/pyramid/treasureRoom.js"></script>
+
+    <!-- Meta system — saveSystem reads state, metaProgress reads saveSystem -->
+    <script src="js/meta/saveSystem.js"></script>
+    <script src="js/meta/metaProgress.js"></script>
+
+    <!-- Status effects — must load before Character so applyStatusEffect is defined -->
+    <script src="js/combat/statusEffects.js"></script>
+
+    <!-- Characters — Character base class before any subclass -->
+    <script src="js/characters/character.js"></script>
+    <script src="js/characters/classes/warrior.js"></script>
+    <script src="js/characters/classes/barbarian.js"></script>
+    <script src="js/characters/classes/cleric.js"></script>
+    <script src="js/characters/classes/archer.js"></script>
+    <script src="js/characters/classes/wizard.js"></script>
+    <script src="js/characters/classes/paladin.js"></script>
+    <script src="js/characters/classes/summoner.js"></script>
+
+    <!-- Items — class first, then data, then loot logic, then procedural generator -->
+    <script src="js/items/item.js"></script>
+    <script src="js/items/itemData.js"></script>
+    <script src="js/items/lootTable.js"></script>
+    <script src="js/items/itemGenerator.js"></script>
+
+    <!-- Relics — data first, then class + API (hasRelic used by combat + main) -->
+    <script src="js/items/relicData.js"></script>
+    <script src="js/items/relic.js"></script>
+
+    <!-- Enemies — data first, then class, then AI -->
+    <script src="js/enemies/enemyData.js"></script>
+    <script src="js/enemies/enemy.js"></script>
+    <script src="js/enemies/enemyAI.js"></script>
+
+    <!-- Potions — data first, then logic (potionLogic reads POTION_DATA + state) -->
+    <script src="js/items/potionData.js"></script>
+    <script src="js/items/potionLogic.js"></script>
+
+    <!-- Combat system — damageCalc → actions → combat loop -->
+    <script src="js/combat/damageCalc.js"></script>
+    <script src="js/combat/actions.js"></script>
+    <script src="js/combat/combat.js"></script>
+
+    <!-- UI components — loaded before screens that use them -->
+    <script src="js/ui/components/diceRoll.js"></script>
+    <script src="js/ui/components/characterPicker.js"></script>
+
+    <!-- UI screens — depend on combat + renderer -->
+    <script src="js/ui/screens/mainMenu.js"></script>
+    <script src="js/ui/screens/pauseMenu.js"></script>
+    <script src="js/ui/screens/runStart.js"></script>
+    <script src="js/ui/screens/combatUI.js"></script>
+    <script src="js/ui/screens/shopUI.js"></script>
+    <script src="js/ui/screens/events/evHelpers.js"></script>
+    <script src="js/ui/screens/events/evBlackMarket.js"></script>
+    <script src="js/ui/screens/events/evDeserter.js"></script>
+    <script src="js/ui/screens/events/evWoundedMerchant.js"></script>
+    <script src="js/ui/screens/events/evOracle.js"></script>
+    <script src="js/ui/screens/events/evAncientAltar.js"></script>
+    <script src="js/ui/screens/events/evDyingScholar.js"></script>
+    <script src="js/ui/screens/events/evMirage.js"></script>
+    <script src="js/ui/screens/events/evPitFighter.js"></script>
+    <script src="js/ui/screens/events/evTombForgotten.js"></script>
+    <script src="js/ui/screens/events/evWeaponCache.js"></script>
+    <script src="js/ui/screens/events/evGambler.js"></script>
+    <script src="js/ui/screens/events/evHeroEncounter.js"></script>
+    <script src="js/ui/screens/eventUI.js"></script>
+    <script src="js/ui/screens/campUI.js"></script>
+    <script src="js/ui/screens/equipmentUI.js"></script>
+    <script src="js/ui/screens/gameOver.js"></script>
+    <script src="js/ui/screens/victoryUI.js"></script>
+    <script src="js/ui/screens/metaScreen.js"></script>
+    <script src="js/ui/screens/trapUI.js"></script>
+    <script src="js/ui/screens/treasureUI.js"></script>
+
+    <script src="js/ui/screens/relicPickUI.js"></script>
+
+    <!-- Entry point — depends on everything above -->
+    <script src="js/main.js"></script>
+</body>
+</html>

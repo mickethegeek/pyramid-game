@@ -1,0 +1,245 @@
+# PYRAMID — Project Brief for Claude Code
+> Read this at the start of every session before writing any code.
+
+---
+
+## What is this game?
+
+Pyramid is a **turn-based roguelite dungeon climber** played in the browser. The player builds a party of up to 6 characters and climbs a pyramid-shaped dungeon, room by room, toward the top. The dungeon is made of triangular rooms — you can only move to rooms that share a side with your current room. The game has three acts, each its own pyramid. Die, and you lose your run — but permanent upgrades and discovered characters carry forward into the next run, compounding over dozens of runs.
+
+The core fantasy: **the same warrior you start with on run 1 becomes something terrifying by run 30.** Long-term investment should feel meaningful and visible.
+
+Inspirations: Slay the Spire (map navigation, act structure), Soda Dungeon (party building, class stacking), Dead Cells (meta-progression, permanent upgrades).
+
+---
+
+## What does it feel like to play?
+
+- Strategic but accessible. Decisions matter but should feel readable.
+- Each run feels different because of random room contents and path choices.
+- Characters feel distinct — a Warrior and a Wizard should play completely differently.
+- Progression feels rewarding — upgrades between runs should be noticeable.
+- Ancient civilisation × fantasy aesthetic. Think Egyptian pyramids meets DnD.
+
+---
+
+## Tech Stack — NEVER deviate from this
+
+- **HTML5 Canvas + vanilla JavaScript only.** No frameworks (no React, no Vue, no Phaser).
+- **No npm packages.** No build tools. No bundlers.
+- Everything runs by opening index.html in a browser via Live Server.
+- The goal is a browser game that can later be wrapped in Electron for desktop — zero rewrites.
+
+---
+
+## File Structure — ALWAYS follow this exactly
+
+```
+pyramid-game/
+  index.html
+  style.css
+  CLAUDE.md              ← this file
+
+  js/
+    main.js              ← game loop, canvas setup, scene switcher
+    state.js             ← all global game state
+    input.js             ← mouse/keyboard input handler
+    renderer.js          ← all canvas drawing functions
+
+    pyramid/
+      pyramid.js         ← pyramid data structure, lazy layer generation
+      room.js            ← room types, generation logic
+      navigation.js      ← adjacency rules, valid moves
+
+    combat/
+      combat.js          ← turn loop, initiative queue
+      actions.js         ← attack, ability, item, defend
+      statusEffects.js   ← all status effect definitions + tick logic
+      damageCalc.js      ← damage formula, crits, resistances
+
+    characters/
+      character.js       ← base character class
+      classes/
+        warrior.js
+        barbarian.js
+        cleric.js
+        archer.js
+        wizard.js
+        paladin.js
+        summoner.js
+
+    enemies/
+      enemy.js           ← base enemy class
+      enemyData.js       ← all enemy definitions (data only, no logic)
+      enemyAI.js         ← AI decision logic
+
+    items/
+      item.js
+      itemData.js        ← all item/weapon/armor/relic definitions (data only)
+      lootTable.js       ← drop tables, rarity weights
+
+    meta/
+      metaProgress.js    ← permanent upgrades, Soul Shards, class discovery
+      saveSystem.js      ← localStorage save/load
+
+    ui/
+      screens/
+        mainMenu.js
+        runStart.js      ← character select
+        pyramidView.js   ← navigation screen
+        combatUI.js
+        shopUI.js
+        eventUI.js
+        metaScreen.js    ← between-run upgrade screen
+        gameOver.js
+      components/
+        healthBar.js
+        statPanel.js
+        tooltip.js
+```
+
+---
+
+## Core Design Rules — NEVER break these
+
+1. **Data-driven.** Never hardcode an enemy, item, or class inside logic files. All definitions live in data files (enemyData.js, itemData.js, etc.). Logic files read from data files.
+
+2. **One responsibility per file.** damageCalc.js only calculates damage. renderer.js only draws. If a file is doing two things, it should be two files.
+
+3. **No global variables except state.js.** All shared state lives in state.js and is imported explicitly.
+
+4. **Every function does one thing.** Small, named, readable functions. No 100-line functions.
+
+5. **Comment your code.** Every function gets a one-line comment explaining what it does.
+
+6. **When unsure about a design decision — STOP and ask the developer before proceeding.** Do not make assumptions about game design. Do make assumptions about code structure if it's unambiguous.
+
+---
+
+## The Stats System
+
+Every character and enemy has exactly these 7 stats:
+
+| Stat | What it does |
+|------|-------------|
+| HP   | Total hit points |
+| DEF  | Flat damage reduction per hit |
+| DMG  | Base damage multiplier |
+| DEX  | Crit chance, dodge, trap avoidance |
+| SPD  | Initiative order in combat |
+| INT  | Scales spell damage, determines mana pool size |
+| LUCK | Affects crit, loot quality, event outcomes |
+
+Stats have three layers:
+- **Base** — the class's starting value
+- **Permanent** — added by meta-upgrades (persists across all runs, affects all instances of that class)
+- **Run** — gained via leveling and equipment (lost on death)
+
+**Final stat = base + permanent + run bonuses**
+
+---
+
+## The Classes
+
+| Class | Role | Signature Mechanic |
+|-------|------|--------------------|
+| Warrior | Tank / CC | Taunt (force enemies to target him) |
+| Barbarian | Berserker | Rage state: +DMG, -DEF |
+| Cleric | Healer / Spellcaster | Divine Pact, unlockable subclasses |
+| Archer | Fast sniper | High SPD, status applier |
+| Wizard | AoE nuke | Highest INT, glass cannon |
+| Paladin | Hybrid tank-healer | Holy Shield, anti-undead bonus |
+| Summoner | Indirect damage | Summon familiars into combat |
+
+Classes are **discovered** during runs (first encounter = permanently unlocked). Multiple instances of the same class can exist in one party. Permanent upgrades affect ALL instances of a class.
+
+---
+
+## Combat System
+
+- **Turn-based, initiative order** based on SPD stat (highest goes first)
+- On your turn: Basic Attack / Special Ability (costs mana) / Use Item / Defend
+- **Mana pool** = INT × 5. Regenerates INT/10 per turn. Does NOT reset between fights.
+- **Damage formula:** Attacker DMG × ability multiplier − Defender DEF (minimum 1)
+- Crits triggered by DEX/LUCK check, multiply damage 1.5–2.5×
+- Status effects: Poison, Burn, Stun, Bleed, Taunt, Rage, Shield, Slow, Bless, Curse
+
+---
+
+## The Pyramid
+
+- Each act = one pyramid, **15 layers deep**
+- Layer N has (2N − 1) triangular rooms. Total = 225 rooms per pyramid.
+- Player visits ~15–30 rooms per act due to path constraints.
+- **Adjacency rule:** you can only enter a room that shares a side with your current room.
+  - Upward triangle (△): connects to left neighbor, right neighbor, and the downward triangle above it.
+  - Downward triangle (▽): connects to left neighbor, right neighbor, and the upward triangle below it.
+- **Lazy generation:** only generate a layer when the player first reaches the layer below it. Never generate the full pyramid upfront.
+- 3 acts per run. Boss always at the top triangle of each act.
+
+### Room Types
+| Type | Notes |
+|------|-------|
+| Combat | Standard fight. Most common. |
+| Elite Combat | Harder enemy, better rewards. |
+| Shop | Spend gold. |
+| Event | Narrative choice, risk/reward. |
+| Treasure | Free loot. |
+| Rest | Heal party HP. |
+| Trap | Surprise damage/debuff. DEX helps avoid. |
+| Ambush | Combat where enemies act first. |
+| Warp | Teleport to random room next layer. |
+| Boss | Fixed at pyramid apex. Cannot skip. |
+
+---
+
+## Meta Progression
+
+- **Soul Shards** — single meta-currency. Earned by completing rooms, defeating bosses, discovering classes.
+- Spent between runs on permanent stat upgrades per class.
+- Upgrade trees have 3–5 nodes per stat. Later nodes unlock new mechanics, not just bigger numbers.
+- **Evolved forms** unlock at upgrade thresholds (e.g. Warrior → Warlord). New name, altered kit.
+- **Item unlocks:** items found for the first time enter the loot pool for all future runs.
+
+---
+
+## Equipment
+
+Each character has 3 slots: **Weapon, Armor, Accessory**
+- Weapons + Armor = stat bonuses
+- Accessories = passive relic-style effects (e.g. "first hit each combat is always a crit")
+- Rarities: Common / Uncommon / Rare / Legendary
+
+---
+
+## Build Order (Milestones)
+
+| # | Milestone | Done when... |
+|---|-----------|-------------|
+| 1 | Skeleton | Canvas opens, draws "PYRAMID" on screen |
+| 2 | Pyramid Navigation | Clickable triangle grid, valid moves highlighted |
+| 3 | Basic Combat | Warrior vs. one enemy, full turn loop, win/lose |
+| 4 | Full Classes & Abilities | All 7 classes with mana + status effects |
+| 5 | All Room Types | Shop, event, rest, trap, etc. all functional |
+| 6 | Meta Progression | Soul Shards, permanent upgrades, save system |
+| 7 | Full Pyramid | 15-layer lazy generation, 3 acts, bosses |
+| 8 | Polish | Sprites, sound, balance, Electron wrap |
+
+**We are currently on Milestone 1.**
+
+---
+
+## How to Start a Session
+
+Paste this at the top of every new Claude Code session:
+
+> "Read CLAUDE.md first. We are on Milestone [X]. Today's task is: [specific task]. Here is the relevant file: [paste file contents if editing existing code]."
+
+---
+
+## Developer Notes
+
+- The developer is a beginner. Explain what you're doing as you go.
+- Prefer simple, readable code over clever code.
+- When you finish a task, tell the developer exactly how to test it.
+- If something could be done multiple ways, pick the simplest one and explain why.
