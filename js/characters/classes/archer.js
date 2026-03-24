@@ -46,7 +46,14 @@ class Archer extends Character {
     // Initialise with Archer stats and abilities
     constructor() {
         super('Archer', ARCHER_BASE_STATS);
+        this.classKey  = 'archer';
         this.abilities = ARCHER_ABILITIES;
+        this.baseSkill = 'piercing_shot';
+        this.skillLevels['piercing_shot'] = 1;
+        // Hybrid class — keeps mana and also has a smaller stamina pool
+        this.maxStamina     = 6;
+        this.currentStamina = 6;
+        this.staminaRegen   = 2;
     }
 
     // Archer scales into DEX for more crits and dodges, and steady damage

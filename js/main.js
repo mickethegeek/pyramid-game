@@ -211,12 +211,29 @@ function enterRoom(room) {
 // Initialise a combat encounter for the given room type
 // roomType: 'normal' | 'elite' | 'boss' — used to pick the enemy group and set isBoss
 function startCombat(roomType, ambush) {
-    const keys    = pickEnemyGroup(roomType, state.actNumber);
-    const enemies = createEnemyGroup(keys, state.actNumber);
+    let enemies;
 
-    state.combat            = initCombat(state.party, enemies);
-    state.combat.combatType = roomType;
-    state.combat.isBoss     = (roomType === 'boss');
+    if (state.actNumber === 1 && (roomType === 'normal' || roomType === 'ambush')) {
+        // Act 1 normal combat: use the curated composition queue
+        if (state.act1CompositionsRemaining.length > 0) {
+            const compKey = state.act1CompositionsRemaining.shift();
+            enemies = loadComposition(compKey, state.actNumber);
+            state.lastCompositionKey = compKey;  // stored here; copied to combat below after initCombat
+        } else {
+            // Queue exhausted — fall back to random Act 1 enemies
+            enemies = pickAct1RandomEnemies();
+        }
+    } else {
+        // Elites, bosses, and Acts 2–3: existing random selection
+        const keys = pickEnemyGroup(roomType, state.actNumber);
+        enemies    = createEnemyGroup(keys, state.actNumber);
+    }
+
+    state.combat                 = initCombat(state.party, enemies);
+    state.combat.combatType      = roomType;
+    state.combat.isBoss          = (roomType === 'boss');
+    state.combat.compositionKey  = state.lastCompositionKey || null;  // which named encounter this is
+    state.lastCompositionKey     = null;  // clear temp storage
     resetCombatUIState();
 
     // Show intro flavour text for boss fights
@@ -540,6 +557,7 @@ function startFreshRun() {
     state.adjacentRooms = getAdjacentRooms(state.pyramid, state.currentRoom);
     state.actNumber     = 1;
     assignActRelics();
+    buildCompositionQueue();   // shuffle Act 1 encounter order for this run
 
     state.currentScene  = 'runStart';
 }
@@ -565,6 +583,12 @@ function gameLoop() {
         if (state.combat && state.combat.pendingEnemyTurn && performance.now() >= state.combat.enemyTurnTime) {
             state.combat.pendingEnemyTurn = false;
             executeEnemyTurn(state.combat);
+            if (state.combat.phase === 'defeat') { handleDefeat(); }
+        }
+        // Auto-fire a charge-up tick when the delay has elapsed
+        if (state.combat && state.combat.pendingChargeTick && performance.now() >= state.combat.chargeTickTime) {
+            state.combat.pendingChargeTick = false;
+            executeChargeUpTick(state.combat);
             if (state.combat.phase === 'defeat') { handleDefeat(); }
         }
         if (state.currentScene === 'combat') drawCombatScreen(state.combat);

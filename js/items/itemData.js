@@ -1,6 +1,7 @@
 // All item definitions — data only, no logic
-// type: 'weapon' | 'armor' | 'accessory'
+// type: 'weapon' | 'armor' | 'accessory' | 'shield' | 'tome' | 'orb' | 'quiver' | 'focus'
 // rarity: 'common' | 'uncommon' | 'rare' | 'legendary'
+// Offhand types (shield, tome, orb, quiver, focus) equip to character.equipment.offhand
 
 const ITEM_DATA = {
 
@@ -134,6 +135,137 @@ const ITEM_DATA = {
         statBonus: { dex: 4, luck: 4 },
         passiveKey:  'trap_immunity',
         passiveDesc: 'Immune to all trap damage.',
+    },
+
+
+    // ── Offhand: Shields (Warrior / Paladin) ──────────────────────────────────
+
+    buckler: {
+        name: 'Buckler',
+        type: 'shield',
+        rarity: 'common',
+        description: 'A small round shield — light enough not to slow you down.',
+        statBonus: { def: 3, hp: 5 },
+    },
+
+    kite_shield: {
+        name: 'Kite Shield',
+        type: 'shield',
+        rarity: 'uncommon',
+        description: 'A tapered shield that covers the torso and upper leg.',
+        statBonus: { def: 5, hp: 10 },
+    },
+
+    tower_shield: {
+        name: 'Tower Shield',
+        type: 'shield',
+        rarity: 'rare',
+        description: 'A massive slab of iron — almost a wall unto itself.',
+        statBonus: { def: 7, hp: 15 },
+    },
+
+    // ── Offhand: Tomes (Cleric / Wizard) ──────────────────────────────────────
+
+    worn_tome: {
+        name: 'Worn Tome',
+        type: 'tome',
+        rarity: 'common',
+        description: 'Pages soft with handling, filled with half-legible annotations.',
+        statBonus: { int: 3, hp: 3 },
+    },
+
+    scholars_tome: {
+        name: "Scholar's Tome",
+        type: 'tome',
+        rarity: 'uncommon',
+        description: 'A methodically indexed compendium of arcane theory.',
+        statBonus: { int: 5, hp: 5 },
+    },
+
+    ancient_codex: {
+        name: 'Ancient Codex',
+        type: 'tome',
+        rarity: 'rare',
+        description: 'Bound in unknown hide, its script rewrites itself between readings.',
+        statBonus: { int: 7, hp: 7 },
+    },
+
+    // ── Offhand: Orbs (Barbarian / Cleric / Wizard / Summoner) ────────────────
+
+    chaos_orb: {
+        name: 'Chaos Orb',
+        type: 'orb',
+        rarity: 'common',
+        description: 'Swirls of raw energy barely contained within cracked crystal.',
+        statBonus: { int: 2, dmg: 2 },
+    },
+
+    void_orb: {
+        name: 'Void Orb',
+        type: 'orb',
+        rarity: 'uncommon',
+        description: 'A sphere of absolute darkness that hums with suppressed violence.',
+        statBonus: { int: 4, dmg: 3 },
+    },
+
+    soul_orb: {
+        name: 'Soul Orb',
+        type: 'orb',
+        rarity: 'rare',
+        description: 'Three screaming faces orbit the surface — too small to recognise.',
+        statBonus: { int: 5, dmg: 5 },
+    },
+
+    // ── Offhand: Quivers (Archer) ─────────────────────────────────────────────
+
+    quiver: {
+        name: 'Quiver',
+        type: 'quiver',
+        rarity: 'common',
+        description: 'Simple leather tube. Keeps your arrows in reach.',
+        statBonus: { dex: 3, spd: 2 },
+    },
+
+    hunting_quiver: {
+        name: 'Hunting Quiver',
+        type: 'quiver',
+        rarity: 'uncommon',
+        description: 'Custom-fitted for fast draws. Well-balanced and silent.',
+        statBonus: { dex: 5, spd: 3 },
+    },
+
+    battle_quiver: {
+        name: 'Battle Quiver',
+        type: 'quiver',
+        rarity: 'rare',
+        description: 'Heavy-duty quiver with a quick-release mechanism.',
+        statBonus: { dex: 7, spd: 4 },
+    },
+
+    // ── Offhand: Foci (Summoner) ──────────────────────────────────────────────
+
+    crude_focus: {
+        name: 'Crude Focus',
+        type: 'focus',
+        rarity: 'common',
+        description: 'A rough gemstone that helps channel the will outward.',
+        statBonus: { int: 2, luck: 2 },
+    },
+
+    soul_focus: {
+        name: 'Soul Focus',
+        type: 'focus',
+        rarity: 'uncommon',
+        description: 'A preserved eye from something that should not have had eyes.',
+        statBonus: { int: 4, luck: 3 },
+    },
+
+    void_focus: {
+        name: 'Void Focus',
+        type: 'focus',
+        rarity: 'rare',
+        description: 'Cold to the touch. Familiar creatures are drawn to it instinctively.',
+        statBonus: { int: 5, luck: 5 },
     },
 
 };

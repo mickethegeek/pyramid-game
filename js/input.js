@@ -28,11 +28,14 @@ function handleClick(event) {
     }
 }
 
-// Scroll the equipment inventory when the wheel is used over the canvas
+// Scroll the equipment inventory or combat log when the wheel is used over the canvas
 function handleWheel(event) {
     if (state.currentScene === 'equipment') {
         event.preventDefault();
         handleEquipmentScroll(event.deltaY > 0 ? 1 : -1);
+    } else if (state.currentScene === 'combat') {
+        event.preventDefault();
+        handleCombatLogScroll(event.deltaY);
     }
 }
 

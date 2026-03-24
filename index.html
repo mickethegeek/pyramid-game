@@ -33,6 +33,7 @@
 
     <!-- Characters — Character base class before any subclass -->
     <script src="js/characters/character.js"></script>
+    <script src="js/characters/familiar.js"></script>
     <script src="js/characters/classes/warrior.js"></script>
     <script src="js/characters/classes/barbarian.js"></script>
     <script src="js/characters/classes/cleric.js"></script>
@@ -59,6 +60,13 @@
     <!-- Potions — data first, then logic (potionLogic reads POTION_DATA + state) -->
     <script src="js/items/potionData.js"></script>
     <script src="js/items/potionLogic.js"></script>
+
+    <!-- Room compositions — must load before combat so loadComposition() is available -->
+    <script src="js/enemies/roomCompositions.js"></script>
+
+    <!-- Skills — data first, then management logic (read by combat + UI) -->
+    <script src="js/skills/skillData.js"></script>
+    <script src="js/skills/skillLogic.js"></script>
 
     <!-- Combat system — damageCalc → actions → combat loop -->
     <script src="js/combat/damageCalc.js"></script>

@@ -30,15 +30,27 @@ function initCombat(party, enemies) {
         addToLog(combat, 'Mark of Suffering: the party takes 5 damage!');
     }
 
+    // Aggro: party members starting in the front row open with initial threat
+    for (const member of party) {
+        if (member.row === 'front') member.aggro += 20;
+    }
+
+    // Pre-roll enemy intentions immediately if the player acts first
+    if (firstIsPlayer) prerollEnemyIntentions(combat);
+
     return combat;
 }
 
-// Build one shared initiative queue from all party members and all enemies, sorted by SPD desc
+// Build one shared initiative queue from all party members, enemies, and active familiar, sorted by SPD desc
 function buildInitiativeQueue(party, enemies) {
     const slots = [
         ...party.map(member => ({ combatant: member, isPlayer: true  })),
         ...enemies.map(enemy  => ({ combatant: enemy,  isPlayer: false })),
     ];
+    // If a familiar is already active (carried in from a previous combat), slot it in by SPD
+    if (state.activeFamiliar && state.activeFamiliar.isAlive()) {
+        slots.push({ combatant: state.activeFamiliar, isPlayer: false, isFamiliar: true });
+    }
     return slots.sort((a, b) => b.combatant.getStat('spd') - a.combatant.getStat('spd'));
 }
 
@@ -67,7 +79,9 @@ function isAllEnemiesDefeated(combat) {
     return combat.enemies.every(e => !e.isAlive());
 }
 
-// Advance to the next living combatant in the queue, skipping dead ones
+// Advance to the next living combatant in the queue, skipping dead ones.
+// Pre-rolls all enemy intentions when a player turn begins so telegraphs are ready to display.
+// Triggers aggro decay after every full pass through the queue (one complete round).
 function nextTurn(combat) {
     const total = combat.queue.length;
     let   steps = 0;
@@ -79,12 +93,66 @@ function nextTurn(combat) {
     combat.turnStarted = false;
     const current = combat.queue[combat.turnIndex];
     combat.phase  = current.isPlayer ? 'player_turn' : 'enemy_turn';
+
+    // Count turns; when a full queue cycle completes, decay all aggro by 5%
+    combat.turnsSinceDecay = (combat.turnsSinceDecay || 0) + 1;
+    if (combat.turnsSinceDecay >= total) {
+        decayAggro(combat);
+        combat.turnsSinceDecay = 0;
+    }
+
+    // Charge-up: if a charging player's turn just started, auto-schedule the tick
+    if (current.isPlayer && current.combatant.charging) {
+        scheduleChargeTick(combat);
+    }
+
+    // Pre-roll intentions so badges are visible to the player before enemies act
+    if (combat.phase === 'player_turn') prerollEnemyIntentions(combat);
 }
 
-// Append a message to the combat log, keeping only the last 4 entries
+// Reduce all living combatants' aggro by 5% at the end of each full round.
+// Keeps the threat table dynamic — idle party members gradually lose threat.
+function decayAggro(combat) {
+    for (const slot of combat.queue) {
+        const c = slot.combatant;
+        if (c.isAlive()) c.aggro = Math.max(0, Math.floor(c.aggro * 0.95));
+    }
+}
+
+// Roll each living enemy's next action and cache the result on the enemy for both display and execution.
+// Called at the start of every player turn. The cached action is consumed in executeEnemyTurn so
+// the telegraph badge and the actual execution always use the same random roll.
+function prerollEnemyIntentions(combat) {
+    const aliveParty = getAlivePartyMembers(combat);
+    for (const enemy of getAliveEnemies(combat)) {
+        const action = getEnemyAction(enemy, aliveParty);
+
+        // Cache the full action so executeEnemyTurn uses it instead of re-rolling
+        enemy._prerolledAction = action;
+
+        // Build the display badge from the same roll
+        if (action.type === 'defend') {
+            enemy.intendedAction = { name: 'Defend', targetName: enemy.name, type: 'buff' };
+        } else if (action.ability) {
+            enemy.intendedAction = {
+                name:       actionKeyToName(action.ability.key),
+                targetName: action.target ? action.target.name : '?',
+                type:       action.ability.type || 'attack',
+            };
+        } else {
+            enemy.intendedAction = {
+                name:       'Attack',
+                targetName: action.target ? action.target.name : '?',
+                type:       'attack',
+            };
+        }
+    }
+}
+
+// Append a message to the combat log; keep up to 200 entries so the player can scroll history
 function addToLog(combat, message) {
     combat.log.push(message);
-    if (combat.log.length > 4) combat.log.shift();
+    if (combat.log.length > 200) combat.log.shift();
 }
 
 // Run start-of-turn housekeeping: tick status effects and regenerate mana.
@@ -92,9 +160,13 @@ function addToLog(combat, message) {
 // Stun flag captured BEFORE ticking because duration:1 ticking clears it.
 function startOfTurn(combat, combatant) {
     combat.turnStarted = true;
-    const wasStunned   = combatant.isStunned;
+    const wasStunned     = combatant.isStunned;
+    // Capture and clear silence before ticking so executePlayerAbility can read wasSilenced
+    combatant.wasSilenced = combatant.isSilenced;
+    combatant.isSilenced  = false;
     combatant.tickStatusEffects(msg => addToLog(combat, msg));
-    if (combatant.regenMana) combatant.regenMana();
+    if (combatant.regenMana)    combatant.regenMana();
+    if (combatant.regenStamina) combatant.regenStamina();
     // Tick ability cooldowns (e.g. Summoner's Devour cooldown)
     if (combatant.devourCooldown > 0) combatant.devourCooldown--;
     return wasStunned;
@@ -135,11 +207,17 @@ function executeFamiliarTurn(combat) {
         return;
     }
 
-    // Pick a random alive enemy to attack
-    const target = targets[Math.floor(Math.random() * targets.length)];
-    const dmg    = Math.max(1, actor.getStat('dmg'));
-    target.takeDamage(dmg, msg => addToLog(combat, msg));
-    addToLog(combat, actor.name + ' pounces on ' + target.name + ' for ' + dmg + ' damage!');
+    // Attack the alive enemy with the highest aggro (same threat logic as aggressive AI)
+    const target = targets.reduce((a, b) => b.aggro > a.aggro ? b : a);
+    const log    = msg => addToLog(combat, msg);
+    const result = basicAttack(actor, target, false, log);
+
+    if (!result.missed) {
+        const msg = result.isCrit
+            ? 'CRITICAL! ' + actor.name + ' pounces on ' + target.name + ' for ' + result.damage + '!'
+            : actor.name + ' pounces on ' + target.name + ' for ' + result.damage + ' damage!';
+        addToLog(combat, msg);
+    }
 
     if (!target.isAlive()) addToLog(combat, target.name + ' is defeated!');
 
@@ -162,12 +240,103 @@ function scheduleEnemyTurn(combat) {
     combat.enemyTurnTime    = performance.now() + 700;
 }
 
+// ─── Charge-up scheduling ──────────────────────────────────────────────────────
+
+// Schedule an automatic charge tick for a charging player — same delay as enemy turns.
+function scheduleChargeTick(combat) {
+    combat.pendingChargeTick = true;
+    combat.chargeTickTime    = performance.now() + 700;
+}
+
+// Process one automatic tick of a charge-up ability on the currently-acting character.
+// Called by the game loop when pendingChargeTick fires.
+// On the final tick (turnsLeft reaches 0) the ability fires automatically.
+function executeChargeUpTick(combat) {
+    const actor    = getCurrentActor(combat);
+    const charging = actor.charging;
+    if (!charging) return;   // stale tick — actor already acted this turn via a click
+
+    const wasStunned = startOfTurn(combat, actor);
+    if (checkCombatEndAfterTick(combat, actor)) return;
+
+    // Stun interrupts a charge
+    if (wasStunned) {
+        actor.charging = null;
+        addToLog(combat, actor.name + ' is stunned — ' + charging.abilityName + ' interrupted!');
+        nextTurn(combat);
+        if (combat.phase === 'enemy_turn') scheduleEnemyTurn(combat);
+        return;
+    }
+
+    charging.turnsLeft--;
+
+    if (charging.turnsLeft > 0) {
+        // Still charging — skip this turn
+        addToLog(combat, actor.name + ' is charging ' + charging.abilityName + '...');
+        nextTurn(combat);
+        if (combat.phase === 'enemy_turn') scheduleEnemyTurn(combat);
+        return;
+    }
+
+    // turnsLeft hit 0 — fire the ability (old ability system) or skill (new skill system)
+    actor.charging = null;
+    const ability  = actor.abilities && actor.abilities.find(a => a.key === charging.abilityKey);
+    const skillDef = !ability && SKILL_DATA && SKILL_DATA[charging.abilityKey];
+
+    if (!ability && !skillDef) {
+        addToLog(combat, charging.abilityName + ' fizzles — ability not found.');
+        nextTurn(combat);
+        if (combat.phase === 'enemy_turn') scheduleEnemyTurn(combat);
+        return;
+    }
+
+    const target = (combat.selectedTarget && combat.selectedTarget.isAlive())
+        ? combat.selectedTarget
+        : getAliveEnemies(combat)[0];
+    combat.selectedTarget = null;
+
+    if (ability) {
+        addToLog(combat, actor.name + ' unleashes ' + ability.name + '!');
+        ability.use(actor, target, msg => addToLog(combat, msg), combat);
+    } else {
+        // Skill-based charge-up: fire through the skill's effect() with log callback
+        const level = actor.skillLevels[charging.abilityKey] || 1;
+        addToLog(combat, actor.name + ' unleashes ' + skillDef.levels[level].name + '!');
+        skillDef.effect(actor, target, level, msg => addToLog(combat, msg));
+    }
+    actor.aggro += 10;
+
+    if (target && !target.isAlive()) addToLog(combat, target.name + ' is defeated!');
+
+    if (isAllEnemiesDefeated(combat)) {
+        combat.phase = 'victory';
+        addToLog(combat, 'All enemies defeated!');
+        return;
+    }
+    if (isPartyDefeated(combat)) {
+        combat.phase = 'defeat';
+        addToLog(combat, 'Your party has been defeated...');
+        return;
+    }
+
+    nextTurn(combat);
+    if (combat.phase === 'enemy_turn') scheduleEnemyTurn(combat);
+}
+
 // ─── End-of-tick death check ───────────────────────────────────────────────────
 
 // Check if any combatant died from a status-effect tick and resolve combat if so.
 // Returns true if combat has ended (caller should return immediately).
 function checkCombatEndAfterTick(combat, actor) {
     if (!actor.isAlive()) {
+        // Familiar death — call its hook, clear state, then continue combat normally
+        if (actor.isFamiliar) {
+            actor.onDeath(msg => addToLog(combat, msg));
+            nextTurn(combat);
+            if (combat.phase === 'enemy_turn') scheduleEnemyTurn(combat);
+            return true;
+        }
+
         const actorIsEnemy = combat.enemies.includes(actor);
         if (actorIsEnemy) {
             addToLog(combat, actor.name + ' succumbs to their wounds!');
@@ -180,6 +349,11 @@ function checkCombatEndAfterTick(combat, actor) {
             if (combat.phase === 'enemy_turn') scheduleEnemyTurn(combat);
             return true;
         } else {
+            // If a charging caster dies, their charge is lost
+            if (actor.charging) {
+                addToLog(combat, actor.name + ' was interrupted!');
+                actor.charging = null;
+            }
             addToLog(combat, actor.name + ' has fallen!');
             if (isPartyDefeated(combat)) {
                 combat.phase = 'defeat';
@@ -195,6 +369,108 @@ function checkCombatEndAfterTick(combat, actor) {
 }
 
 // ─── Player actions ────────────────────────────────────────────────────────────
+
+// Execute a skill by key for the currently-acting party member
+function executePlayerSkill(combat, skillKey) {
+    if (!skillKey) return;
+    const skillDef = SKILL_DATA && SKILL_DATA[skillKey];
+    if (!skillDef) return;
+
+    const actor     = getCurrentActor(combat);
+    const level     = actor.skillLevels[skillKey] || 1;
+    const cost      = skillDef.levels[level].manaCost || 3;
+    const skillName = skillDef.levels[level].name;
+
+    // Pre-turn resource check — fail silently without consuming the turn
+    const hasResource = actor.maxStamina > 0 ? actor.hasStamina(cost) : actor.hasMana(cost);
+    if (!hasResource) {
+        const res = actor.maxStamina > 0 ? 'stamina' : 'mana';
+        addToLog(combat, 'Not enough ' + res + ' for ' + skillName + '!');
+        return;
+    }
+
+    // Charge-up (turn 1): start charging before startOfTurn so the tick is scheduled correctly
+    if (skillDef.chargeUp && !actor.charging) {
+        const wasStunned = startOfTurn(combat, actor);
+        if (checkCombatEndAfterTick(combat, actor)) return;
+        if (wasStunned) {
+            addToLog(combat, actor.name + ' is stunned and cannot act!');
+            nextTurn(combat);
+            if (combat.phase === 'enemy_turn') scheduleEnemyTurn(combat);
+            return;
+        }
+        // Spend resource and store charging state
+        if (actor.maxStamina > 0) actor.spendStamina(cost);
+        else actor.spendMana(cost);
+        actor.charging = { abilityKey: skillKey, abilityName: skillName, turnsLeft: 2 };
+        addToLog(combat, actor.name + ' begins charging ' + skillName + '!');
+        actor.aggro += 10;
+        nextTurn(combat);
+        if (combat.phase === 'enemy_turn') scheduleEnemyTurn(combat);
+        return;
+    }
+
+    const wasStunned = startOfTurn(combat, actor);
+    if (checkCombatEndAfterTick(combat, actor)) return;
+
+    if (wasStunned) {
+        addToLog(combat, actor.name + ' is stunned and cannot act!');
+        nextTurn(combat);
+        if (combat.phase === 'enemy_turn') scheduleEnemyTurn(combat);
+        return;
+    }
+
+    if (actor.wasSilenced) {
+        addToLog(combat, actor.name + ' is silenced and cannot use skills!');
+        nextTurn(combat);
+        if (combat.phase === 'enemy_turn') scheduleEnemyTurn(combat);
+        return;
+    }
+
+    // Resolve target: AoE = all alive enemies; self = caster; single/ranged/magic = selected or first
+    let target;
+    if (skillDef.attackType === 'aoe') {
+        target = getAliveEnemies(combat);
+    } else if (skillDef.attackType === 'self') {
+        target = actor;
+    } else {
+        target = (combat.selectedTarget && combat.selectedTarget.isAlive())
+            ? combat.selectedTarget
+            : getAliveEnemies(combat)[0];
+        combat.selectedTarget = null;
+    }
+
+    const success = useSkill(actor, skillKey, target, msg => addToLog(combat, msg));
+    if (!success) {
+        nextTurn(combat);
+        if (combat.phase === 'enemy_turn') scheduleEnemyTurn(combat);
+        return;
+    }
+
+    // Multi-arrow skills (Volley L2, Eclipse) hold the turn open — combatUI fires each arrow on click
+    if (actor.volleyArrowsLeft > 0 || actor.eclipseArrowsLeft > 0) return;
+
+    // Radiant Word two-step: hold the turn open while the player clicks an ally for healing
+    if (actor.radiantWordHealPending) return;
+
+    // Log a defeat if the (single) target was killed
+    if (target && !Array.isArray(target) && !target.isAlive()) {
+        addToLog(combat, target.name + ' is defeated!');
+    }
+
+    if (isAllEnemiesDefeated(combat)) {
+        combat.phase = 'victory';
+        addToLog(combat, 'All enemies defeated!');
+        return;
+    }
+    if (isPartyDefeated(combat)) {
+        combat.phase = 'defeat';
+        return;
+    }
+
+    nextTurn(combat);
+    if (combat.phase === 'enemy_turn') scheduleEnemyTurn(combat);
+}
 
 // Execute the currently-acting party member's basic attack against the first alive enemy
 function executePlayerAttack(combat) {
@@ -221,13 +497,31 @@ function executePlayerAttack(combat) {
     if (forceCrit) combat.playerFirstHitPending = false;
 
     const result = basicAttack(actor, target, forceCrit, msg => addToLog(combat, msg));
-    const msg    = result.isCrit
-        ? 'CRITICAL! ' + actor.name + ' strikes ' + target.name + ' for ' + result.damage + '!'
-        : actor.name + ' attacks ' + target.name + ' for ' + result.damage + ' damage.';
-    addToLog(combat, msg);
+
+    // Only log the hit message if the attack connected (Blind miss already logged in basicAttack)
+    if (!result.missed) {
+        const msg = result.isCrit
+            ? 'CRITICAL! ' + actor.name + ' strikes ' + target.name + ' for ' + result.damage + '!'
+            : actor.name + ' attacks ' + target.name + ' for ' + result.damage + ' damage.';
+        addToLog(combat, msg);
+    }
+
+    // Retribution reflection may have killed the acting player
+    if (!actor.isAlive()) {
+        addToLog(combat, actor.name + ' is slain by Retribution!');
+        if (isPartyDefeated(combat)) {
+            combat.phase = 'defeat';
+            addToLog(combat, 'Your party has been defeated...');
+            return;
+        }
+        nextTurn(combat);
+        if (combat.phase === 'enemy_turn') scheduleEnemyTurn(combat);
+        return;
+    }
 
     if (!target.isAlive()) {
         addToLog(combat, target.name + ' is defeated!');
+        handleEnemyDeath(target, combat, msg => addToLog(combat, msg));
     }
 
     if (isAllEnemiesDefeated(combat)) {
@@ -261,12 +555,38 @@ function executePlayerAbility(combat, abilityIndex) {
         return;
     }
 
+    // Charge-up abilities: start charging on first use; the actual cast fires automatically later
+    if (ability.chargeUp && !actor.charging) {
+        const wasStunned = startOfTurn(combat, actor);
+        if (checkCombatEndAfterTick(combat, actor)) return;
+        if (wasStunned) {
+            addToLog(combat, actor.name + ' is stunned and cannot act!');
+            nextTurn(combat);
+            if (combat.phase === 'enemy_turn') scheduleEnemyTurn(combat);
+            return;
+        }
+        actor.spendMana(ability.manaCost);
+        actor.charging = { abilityKey: ability.key, abilityName: ability.name, turnsLeft: ability.chargeTurns || 2 };
+        addToLog(combat, actor.name + ' begins charging ' + ability.name + '!');
+        nextTurn(combat);
+        if (combat.phase === 'enemy_turn') scheduleEnemyTurn(combat);
+        return;
+    }
+
     const wasStunned = startOfTurn(combat, actor);
 
     if (checkCombatEndAfterTick(combat, actor)) return;
 
     if (wasStunned) {
         addToLog(combat, actor.name + ' is stunned and cannot act!');
+        nextTurn(combat);
+        if (combat.phase === 'enemy_turn') scheduleEnemyTurn(combat);
+        return;
+    }
+
+    // Silence: cannot use abilities this turn (flag captured before clearing in startOfTurn)
+    if (actor.wasSilenced) {
+        addToLog(combat, actor.name + ' is silenced and cannot use abilities!');
         nextTurn(combat);
         if (combat.phase === 'enemy_turn') scheduleEnemyTurn(combat);
         return;
@@ -282,6 +602,8 @@ function executePlayerAbility(combat, abilityIndex) {
     addToLog(combat, actor.name + ' uses ' + ability.name + '!');
     // Pass combat as 4th arg so abilities (e.g. Summon Familiar, Devour) can access queue/state
     ability.use(actor, target, msg => addToLog(combat, msg), combat);
+    // Aggro: using any ability generates a flat threat bump
+    actor.aggro += 10;
 
     // Log any enemy killed by the ability (including Devour)
     if (target && !target.isAlive()) addToLog(combat, target.name + ' is defeated!');
@@ -324,6 +646,85 @@ function executePlayerShield(combat) {
     // startOfTurn already gave 1× regen — give 1 more for 2× total
     if (actor.regenMana) actor.regenMana();
     addToLog(combat, actor.name + ' raises their shield and steadies their mind!');
+
+    nextTurn(combat);
+    if (combat.phase === 'enemy_turn') scheduleEnemyTurn(combat);
+}
+
+// ─── Row switch action ─────────────────────────────────────────────────────────
+
+// Move the active party member between front and back row — costs their full turn
+function executePlayerRowSwitch(combat) {
+    const actor      = getCurrentActor(combat);
+    const wasStunned = startOfTurn(combat, actor);
+
+    if (checkCombatEndAfterTick(combat, actor)) return;
+
+    if (wasStunned) {
+        addToLog(combat, actor.name + ' is stunned and cannot act!');
+        nextTurn(combat);
+        if (combat.phase === 'enemy_turn') scheduleEnemyTurn(combat);
+        return;
+    }
+
+    const dest = (actor.row === 'front') ? 'back' : 'front';
+    actor.row  = dest;
+    // Moving into the front row generates a small aggro bump (stepping into the fight)
+    if (dest === 'front') actor.aggro += 10;
+    addToLog(combat, actor.name + ' moves to the ' + dest + ' row.');
+
+    nextTurn(combat);
+    if (combat.phase === 'enemy_turn') scheduleEnemyTurn(combat);
+}
+
+// Swap rows between the active party member and a chosen ally — only the initiator loses their turn
+function executePlayerRowSwap(combat, swapTarget) {
+    const initiator  = getCurrentActor(combat);
+    const wasStunned = startOfTurn(combat, initiator);
+
+    if (checkCombatEndAfterTick(combat, initiator)) return;
+
+    if (wasStunned) {
+        addToLog(combat, initiator.name + ' is stunned and cannot act!');
+        nextTurn(combat);
+        if (combat.phase === 'enemy_turn') scheduleEnemyTurn(combat);
+        return;
+    }
+
+    const initRow = initiator.row;
+    initiator.row  = swapTarget.row;
+    swapTarget.row = initRow;
+
+    if (initiator.row === 'front') initiator.aggro  += 10;
+    if (swapTarget.row === 'front') swapTarget.aggro += 10;
+
+    addToLog(combat, initiator.name + ' swaps positions with ' + swapTarget.name + '.');
+
+    nextTurn(combat);
+    if (combat.phase === 'enemy_turn') scheduleEnemyTurn(combat);
+}
+
+// ─── Warrior stance switch ─────────────────────────────────────────────────────
+
+// Switch the Warrior's stance between 'battle' and 'guard' — costs their full turn
+function executePlayerStanceSwitch(combat) {
+    const actor      = getCurrentActor(combat);
+    const wasStunned = startOfTurn(combat, actor);
+
+    if (checkCombatEndAfterTick(combat, actor)) return;
+
+    if (wasStunned) {
+        addToLog(combat, actor.name + ' is stunned and cannot act!');
+        nextTurn(combat);
+        if (combat.phase === 'enemy_turn') scheduleEnemyTurn(combat);
+        return;
+    }
+
+    switchStance(actor);
+    const msg = actor.stance === 'battle'
+        ? actor.name + ' switches to Battle Stance! (+20% damage dealt)'
+        : actor.name + ' switches to Guard Stance! (-25% damage taken)';
+    addToLog(combat, msg);
 
     nextTurn(combat);
     if (combat.phase === 'enemy_turn') scheduleEnemyTurn(combat);
@@ -388,6 +789,9 @@ function executeEnemyTurn(combat) {
     // Familiar slots sit in the enemy-phase queue but act as autonomous allies
     if (actor.isFamiliar) return executeFamiliarTurn(combat);
 
+    // Count every turn this enemy takes (before stun check — stunned turns still count)
+    actor.turnCount++;
+
     const wasStunned = startOfTurn(combat, actor);
 
     if (checkCombatEndAfterTick(combat, actor)) return;
@@ -400,32 +804,128 @@ function executeEnemyTurn(combat) {
         return;
     }
 
-    // Respect Taunt — if any alive party member is taunting, the enemy must target them
-    const alive        = getAlivePartyMembers(combat);
-    const tauntTarget  = alive.find(m => m.isTaunting);
-    const forcedTarget = tauntTarget || alive[0];
+    // Fire passive ability if its trigger condition is met (e.g. every-3-turns heal)
+    const alive = getAlivePartyMembers(combat);
+    checkEnemyPassive(actor, combat, msg => addToLog(combat, msg));
 
-    const action = getEnemyAction(actor, forcedTarget);
+    // Use the pre-rolled action from prerollEnemyIntentions if available (keeps telegraph in sync).
+    // If the pre-rolled target is now dead, fall back to a fresh getEnemyAction so we never
+    // attack a corpse. If no pre-roll exists (e.g. combat started on an enemy turn), roll fresh.
+    let action;
+    if (actor._prerolledAction) {
+        action = actor._prerolledAction;
+        actor._prerolledAction = null;
+        // If the intended target died before this turn, re-resolve completely
+        if (action.target && !action.target.isAlive()) {
+            action = getEnemyAction(actor, alive);
+        }
+    } else {
+        action = getEnemyAction(actor, alive);
+    }
 
     if (action.type === 'defend') {
         actor.addStatusEffect('shield', msg => addToLog(combat, msg));
-        addToLog(combat, actor.name + ' braces for the next strike!');
-    } else {
-        const target = forcedTarget;
-        const result = basicAttack(actor, target, false, msg => addToLog(combat, msg));
-        const msg    = result.isCrit
-            ? 'CRITICAL! ' + actor.name + ' strikes ' + target.name + ' for ' + result.damage + '!'
-            : actor.name + ' attacks ' + target.name + ' for ' + result.damage + ' damage.';
-        addToLog(combat, msg);
-
-        if (!target.isAlive()) {
-            addToLog(combat, target.name + ' has fallen!');
+        if (action.isPassiveDefend) {
+            // Passive personality below threshold: apply fortify (+10 DEF, 1 turn — auto-reverses)
+            actor.addStatusEffect('fortify', msg => addToLog(combat, msg));
+        } else {
+            addToLog(combat, actor.name + ' braces for the next strike!');
         }
+    } else {
+        const target = action.target;
 
-        if (isPartyDefeated(combat)) {
-            combat.phase = 'defeat';
-            addToLog(combat, 'Your party has been defeated...');
-            return;
+        // Pinned: melee enemies skip their attack entirely this turn
+        if (actor.isPinned && actor.attackType === 'melee') {
+            addToLog(combat, actor.name + ' is pinned and cannot attack!');
+        } else if (action.ability) {
+            // Enemy-specific ability from the action table
+            action.ability.use(actor, target, msg => addToLog(combat, msg), combat);
+
+            // Check for party members killed by the ability
+            for (const member of combat.party) {
+                if (!member.isAlive() && !member._deathLogged) {
+                    addToLog(combat, member.name + ' has fallen!');
+                    member._deathLogged = true;
+                }
+            }
+
+            if (isPartyDefeated(combat)) {
+                combat.phase = 'defeat';
+                addToLog(combat, 'Your party has been defeated...');
+                return;
+            }
+        } else {
+            // Front row interception: when a melee enemy targets a back-row party member,
+            // the highest-aggro front-row ally gets a free counter-attack before the hit lands.
+            if ((actor.attackType || 'melee') === 'melee' && target.row === 'back') {
+                const frontAllies = combat.party.filter(m => m.isAlive() && m.row === 'front');
+                if (frontAllies.length > 0) {
+                    // Pick the front-row ally carrying the most threat
+                    const interceptor = frontAllies.reduce((a, b) => b.aggro > a.aggro ? b : a);
+                    addToLog(combat, interceptor.name + ' intercepts for ' + target.name + '!');
+                    // High-SPD enemies can dodge the interception — check with interception rules
+                    if (rollDodge(actor, 'interception')) {
+                        addToLog(combat, actor.name + ' dodged the interception!');
+                    } else {
+                        // skipDodge=true: the interception roll above already resolved dodge for this hit
+                        const icResult = basicAttack(interceptor, actor, false, msg => addToLog(combat, msg), true);
+                        if (!icResult.missed) {
+                            const msg = icResult.isCrit
+                                ? 'CRITICAL! ' + interceptor.name + ' counters ' + actor.name + ' for ' + icResult.damage + '!'
+                                : interceptor.name + ' counters ' + actor.name + ' for ' + icResult.damage + ' damage.';
+                            addToLog(combat, msg);
+                        }
+                        // Enemy slain by the counter-attack — resolve death and bail out
+                        if (!actor.isAlive()) {
+                            addToLog(combat, actor.name + ' is slain by the interception!');
+                            handleEnemyDeath(actor, combat, msg => addToLog(combat, msg));
+                            if (isAllEnemiesDefeated(combat)) {
+                                combat.phase = 'victory';
+                                addToLog(combat, 'All enemies defeated!');
+                                return;
+                            }
+                            nextTurn(combat);
+                            if (combat.phase === 'enemy_turn') executeEnemyTurn(combat);
+                            return;
+                        }
+                    }
+                }
+            }
+
+            // Generic basic attack fallback
+            const result = basicAttack(actor, target, false, msg => addToLog(combat, msg));
+
+            // Only log the hit message if the attack connected (Blind miss already logged)
+            if (!result.missed) {
+                const msg = result.isCrit
+                    ? 'CRITICAL! ' + actor.name + ' strikes ' + target.name + ' for ' + result.damage + '!'
+                    : actor.name + ' attacks ' + target.name + ' for ' + result.damage + ' damage.';
+                addToLog(combat, msg);
+            }
+
+            // Retribution reflection may have killed the attacking enemy
+            if (!actor.isAlive()) {
+                addToLog(combat, actor.name + ' is slain by Retribution!');
+                handleEnemyDeath(actor, combat, msg => addToLog(combat, msg));
+                if (isAllEnemiesDefeated(combat)) {
+                    combat.phase = 'victory';
+                    addToLog(combat, 'All enemies defeated!');
+                    return;
+                }
+                nextTurn(combat);
+                if (combat.phase === 'enemy_turn') executeEnemyTurn(combat);
+                return;
+            }
+
+            if (!target.isAlive()) {
+                addToLog(combat, target.name + ' has fallen!');
+            }
+
+            if (isPartyDefeated(combat)) {
+                combat.phase = 'defeat';
+                addToLog(combat, 'Your party has been defeated...');
+                return;
+            }
         }
     }
 

@@ -4,10 +4,40 @@
 // Basic attack: attacker hits defender at 1× damage multiplier
 // forceCrit (optional): passed through from passive effects like first_hit_crit
 // log (optional): combat log callback — required for on-hit passives to fire
-// Returns { damage: number, isCrit: boolean }
-function basicAttack(attacker, defender, forceCrit, log) {
-    const result = calculateDamage(attacker, defender, 1.0, forceCrit);
+// Returns { damage, isCrit, rawDamage, missed? }
+// skipDodge (optional): pass true when the caller already resolved the dodge roll (e.g. interception)
+function basicAttack(attacker, defender, forceCrit, log, skipDodge = false) {
+    // Blind: 35% chance the attack misses entirely — applies to both party and enemies
+    if (attacker.isBlinded && Math.random() < 0.35) {
+        if (log) log(attacker.name + ' swings blindly and misses!');
+        return { damage: 0, isCrit: false, rawDamage: 0, missed: true };
+    }
+
+    // Use the attacker's own attackType so ranged/magic enemies bypass back-row protection
+    const attackType = attacker.attackType || 'melee';
+    const result = calculateDamage(attacker, defender, 1.0, forceCrit, attackType);
+
+    // Dodge: map the attacker's type to a dodge category and roll; skip if caller handled it
+    if (!skipDodge) {
+        const dodgeType = (attackType === 'magic') ? 'magic' : 'single';
+        if (rollDodge(defender, dodgeType)) {
+            if (log) log(defender.name + ' dodged!');
+            return { damage: 0, isCrit: false, rawDamage: 0, missed: true };
+        }
+    }
+
     defender.takeDamage(result.damage, log);
+
+    // Aggro: attacker generates threat equal to half the damage dealt
+    if (result.damage > 0) attacker.aggro += Math.floor(result.damage * 0.5);
+
+    // Retribution: reflect a portion of raw pre-armor damage back at the attacker
+    if (defender.retributionReflect && hasStatusEffect(defender, 'retribution')) {
+        const reflected = Math.max(1, Math.floor(result.rawDamage * defender.retributionReflect));
+        attacker.takeDamage(reflected, log);
+        if (log) log(defender.name + "'s Retribution reflects " + reflected + ' damage back at ' + attacker.name + '!');
+    }
+
     if (log && attacker.equipment) applyOnHitPassives(attacker, defender, log);
     return result;
 }
@@ -33,4 +63,51 @@ function applyOnHitPassives(attacker, defender, log) {
 // Defend: apply a Shield status effect to the combatant (absorbs next hit)
 function defend(combatant, log) {
     applyStatusEffect(combatant, 'shield', log);
+}
+
+// ─── Skill execution ───────────────────────────────────────────────────────────
+
+// Execute a skill for a character: validate ownership, check/spend resource,
+// handle charge-up initiation, or call the skill's effect().
+// target: single enemy/ally, or array of enemies for AoE.
+// Returns true if the skill fired (or charge started), false if blocked.
+function useSkill(character, skillKey, target, log) {
+    const skillDef = SKILL_DATA && SKILL_DATA[skillKey];
+    if (!skillDef) {
+        if (log) log(character.name + ' tried to use an unknown skill: ' + skillKey);
+        return false;
+    }
+
+    const level     = character.skillLevels[skillKey] || 1;
+    const levelData = skillDef.levels[level];
+    const cost      = levelData.manaCost || 3;
+
+    // Physical classes (maxStamina > 0) spend stamina; casters spend mana
+    if (character.maxStamina > 0) {
+        if (!character.hasStamina(cost)) {
+            if (log) log(character.name + ' does not have enough stamina for ' + levelData.name + '!');
+            return false;
+        }
+        character.spendStamina(cost);
+    } else {
+        if (!character.hasMana(cost)) {
+            if (log) log(character.name + ' does not have enough mana for ' + levelData.name + '!');
+            return false;
+        }
+        character.spendMana(cost);
+    }
+
+    // Charge-up: set charging state and return — the actual effect fires on the next turn
+    if (skillDef.chargeUp) {
+        character.charging = { abilityKey: skillKey, abilityName: levelData.name, turnsLeft: 2 };
+        if (log) log(character.name + ' begins charging ' + levelData.name + '!');
+        character.aggro += 10;
+        return true;
+    }
+
+    // Execute the skill effect — pass log so effects can write to the combat log
+    if (log) log(character.name + ' uses ' + levelData.name + '!');
+    skillDef.effect(character, target, level, log);
+    character.aggro += 10;
+    return true;
 }

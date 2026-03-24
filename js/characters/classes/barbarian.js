@@ -1,5 +1,12 @@
 // Barbarian class — Berserker, signature mechanic: Rage
 
+// ─── Enraged check ────────────────────────────────────────────────────────────
+
+// Return true if the Barbarian's current HP is below 50% of their maximum HP
+function isEnraged(character) {
+    return character.currentHP < character.getMaxHP() * 0.5;
+}
+
 // ─── Base stats ───────────────────────────────────────────────────────────────
 
 const BARBARIAN_BASE_STATS = {
@@ -54,7 +61,21 @@ class Barbarian extends Character {
     // Initialise with Barbarian stats and abilities
     constructor() {
         super('Barbarian', BARBARIAN_BASE_STATS);
+        this.classKey  = 'barbarian';
         this.abilities = BARBARIAN_ABILITIES;
+        this.baseSkill = 'cleave';
+        this.skillLevels['cleave'] = 1;
+        // Physical class — uses stamina instead of mana for physical abilities
+        this.maxStamina     = 10;
+        this.currentStamina = 10;
+        this.staminaRegen   = 3;
+    }
+
+    // Announce the first time incoming damage pushes HP below the Enraged threshold
+    takeDamage(amount, log) {
+        const wasEnraged = isEnraged(this);
+        super.takeDamage(amount, log);
+        if (!wasEnraged && isEnraged(this) && log) log(this.name + ' is ENRAGED!');
     }
 
     // Barbarian scales heavily into raw damage — no defensive growth

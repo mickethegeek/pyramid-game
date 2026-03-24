@@ -41,11 +41,15 @@ const PREFIX_POOLS = {
 
 // Map a base item name to its prefix-pool category
 function getBaseCategory(baseName) {
-    if (['Sword', 'Axe', 'Mace', 'Dagger', 'Spear'].includes(baseName))   return 'metalWeapon';
-    if (['Bow', 'Crossbow'].includes(baseName))                            return 'rangedWeapon';
-    if (['Staff', 'Tome', 'Orb', 'Wand'].includes(baseName))              return 'casterWeapon';
-    if (['Shield', 'Plate', 'Mail'].includes(baseName))                    return 'metalArmor';
-    if (['Robe', 'Cloak'].includes(baseName))                              return 'clothArmor';
+    if (['Sword', 'Axe', 'Mace', 'Dagger', 'Spear'].includes(baseName))                                          return 'metalWeapon';
+    if (['Bow', 'Crossbow', 'Quiver', 'Hunting Quiver', 'Battle Quiver', 'Elven Quiver'].includes(baseName))      return 'rangedWeapon';
+    if (['Staff', 'Tome', 'Orb', 'Wand',
+         'Worn Tome', "Scholar's Tome", 'Ancient Codex', 'Arcane Codex',
+         'Chaos Orb', 'Soul Orb', 'Void Orb', 'Arcane Orb',
+         'Focus Crystal', 'Soul Focus', 'Void Focus', 'Spirit Focus'].includes(baseName))                         return 'casterWeapon';
+    if (['Shield', 'Plate', 'Mail',
+         'Buckler', 'Kite Shield', 'Tower Shield', 'Heater Shield'].includes(baseName))                           return 'metalArmor';
+    if (['Robe', 'Cloak'].includes(baseName))                                                                     return 'clothArmor';
     return 'accessory';
 }
 
@@ -85,6 +89,37 @@ const BASE_ITEMS = [
     { name: 'Ring',     type: 'accessory', primary: 'luck', secondary: 'hp'   },
     { name: 'Idol',     type: 'accessory', primary: 'luck', secondary: 'int'  },
     { name: 'Talisman', type: 'accessory', primary: 'luck', secondary: 'dex'  },
+
+    // Offhand: Shields — DEF primary, HP secondary (Warrior / Paladin)
+    // Multi-word names listed before single-word 'Shield' so find(startsWith) resolves correctly
+    { name: 'Kite Shield',   type: 'shield', primary: 'def', secondary: 'hp' },
+    { name: 'Tower Shield',  type: 'shield', primary: 'def', secondary: 'hp' },
+    { name: 'Heater Shield', type: 'shield', primary: 'def', secondary: 'hp' },
+    { name: 'Buckler',       type: 'shield', primary: 'def', secondary: 'hp' },
+
+    // Offhand: Tomes — INT primary, HP secondary (Cleric / Wizard)
+    { name: 'Worn Tome',      type: 'tome', primary: 'int', secondary: 'hp' },
+    { name: "Scholar's Tome", type: 'tome', primary: 'int', secondary: 'hp' },
+    { name: 'Ancient Codex',  type: 'tome', primary: 'int', secondary: 'hp' },
+    { name: 'Arcane Codex',   type: 'tome', primary: 'int', secondary: 'hp' },
+
+    // Offhand: Orbs — INT primary, DMG secondary (Barbarian / Cleric / Wizard / Summoner)
+    { name: 'Chaos Orb',  type: 'orb', primary: 'int', secondary: 'dmg' },
+    { name: 'Soul Orb',   type: 'orb', primary: 'int', secondary: 'dmg' },
+    { name: 'Void Orb',   type: 'orb', primary: 'int', secondary: 'dmg' },
+    { name: 'Arcane Orb', type: 'orb', primary: 'int', secondary: 'dmg' },
+
+    // Offhand: Quivers — DEX primary, SPD secondary (Archer)
+    { name: 'Quiver',         type: 'quiver', primary: 'dex', secondary: 'spd' },
+    { name: 'Hunting Quiver', type: 'quiver', primary: 'dex', secondary: 'spd' },
+    { name: 'Battle Quiver',  type: 'quiver', primary: 'dex', secondary: 'spd' },
+    { name: 'Elven Quiver',   type: 'quiver', primary: 'dex', secondary: 'spd' },
+
+    // Offhand: Foci — INT primary, LUCK secondary (Summoner)
+    { name: 'Focus Crystal', type: 'focus', primary: 'int', secondary: 'luck' },
+    { name: 'Soul Focus',    type: 'focus', primary: 'int', secondary: 'luck' },
+    { name: 'Void Focus',    type: 'focus', primary: 'int', secondary: 'luck' },
+    { name: 'Spirit Focus',  type: 'focus', primary: 'int', secondary: 'luck' },
 ];
 
 // ─── Suffixes ─────────────────────────────────────────────────────────────────
@@ -109,6 +144,42 @@ const NEGATIVE_SUFFIXES = [
     { name: 'of Misfortune',   stat: 'luck' },
     { name: 'of Frailty',      stat: 'hp',  mult: 2 },
 ];
+
+// ─── Offhand stat ranges (primary / secondary) by type and rarity ────────────
+// Each entry: { primary: [min, max], secondary: [min, max] }
+
+const OFFHAND_STAT_RANGES = {
+    shield: {
+        common:    { primary: [3, 4],  secondary: [5,  7]  },
+        uncommon:  { primary: [4, 6],  secondary: [7,  10] },
+        rare:      { primary: [5, 7],  secondary: [10, 13] },
+        legendary: { primary: [6, 8],  secondary: [12, 15] },
+    },
+    tome: {
+        common:    { primary: [3, 4],  secondary: [3,  4]  },
+        uncommon:  { primary: [4, 5],  secondary: [4,  6]  },
+        rare:      { primary: [5, 7],  secondary: [5,  7]  },
+        legendary: { primary: [6, 8],  secondary: [6,  8]  },
+    },
+    orb: {
+        common:    { primary: [2, 3],  secondary: [2,  3]  },
+        uncommon:  { primary: [3, 4],  secondary: [3,  4]  },
+        rare:      { primary: [4, 5],  secondary: [4,  5]  },
+        legendary: { primary: [5, 6],  secondary: [4,  5]  },
+    },
+    quiver: {
+        common:    { primary: [3, 4],  secondary: [2,  3]  },
+        uncommon:  { primary: [4, 6],  secondary: [3,  4]  },
+        rare:      { primary: [5, 7],  secondary: [3,  4]  },
+        legendary: { primary: [6, 8],  secondary: [4,  5]  },
+    },
+    focus: {
+        common:    { primary: [2, 3],  secondary: [2,  3]  },
+        uncommon:  { primary: [3, 4],  secondary: [3,  4]  },
+        rare:      { primary: [4, 5],  secondary: [4,  5]  },
+        legendary: { primary: [5, 6],  secondary: [5,  6]  },
+    },
+};
 
 // ─── Stat value ranges by rarity ──────────────────────────────────────────────
 
@@ -143,28 +214,51 @@ function randInt(min, max) {
 // ─── Main generator ───────────────────────────────────────────────────────────
 
 // Generate and return a new procedural Item.
-// forcedType:   'weapon' | 'armor' | 'accessory'  — constrains the base pool.
+// forcedType:   'weapon' | 'armor' | 'accessory' | 'offhand' — constrains the base pool.
+//               Pass 'offhand' + classKey to auto-pick the right offhand type for that class.
 // forcedRarity: 'common' | 'uncommon' | 'rare' | 'legendary' — skips the rarity roll.
-function generateItem(forcedType, forcedRarity) {
+// classKey:     only used when forcedType is 'offhand' — picks a valid type for that class.
+function generateItem(forcedType, forcedRarity, classKey) {
     // 1. Rarity determines stat ceiling
-    const rarity       = forcedRarity || rollRarity();
-    const [minV, maxV] = GEN_STAT_RANGES[rarity];
+    const rarity = forcedRarity || rollRarity();
 
-    // 2. Pick base item first — the category determines which prefix pool to use
-    const basePool = forcedType ? BASE_ITEMS.filter(b => b.type === forcedType) : BASE_ITEMS;
-    const base     = randomFrom(basePool);
-
-    // 3. Pick a prefix from the correct pool for this base and rarity
-    const prefix = randomFrom(getPrefixPool(base.name, rarity));
-
-    // 4. Generate primary stat; add secondary at uncommon+
-    const statBonus = { hp: 0, def: 0, dmg: 0, dex: 0, spd: 0, int: 0, luck: 0 };
-    statBonus[base.primary] = randInt(minV, maxV);
-    if (base.secondary && rarity !== 'common') {
-        statBonus[base.secondary] = randInt(1, Math.max(1, Math.floor(maxV / 2)));
+    // 2. Resolve 'offhand' into a concrete type using the class's allowed offhand types
+    let resolvedType = forcedType;
+    if (forcedType === 'offhand') {
+        const validTypes = OFFHAND_RULES[classKey] || ['shield'];
+        // Only pick from types that have dedicated BASE_ITEMS entries (exclude 'weapon')
+        const offhandItemTypes = validTypes.filter(t => t !== 'weapon');
+        resolvedType = randomFrom(offhandItemTypes.length ? offhandItemTypes : ['shield']);
     }
 
-    // 5. Roll for a suffix
+    // 3. Pick base item — filter by resolved type
+    const basePool = resolvedType ? BASE_ITEMS.filter(b => b.type === resolvedType) : BASE_ITEMS;
+    const base     = randomFrom(basePool);
+
+    // 4. Pick a prefix from the correct pool for this base and rarity
+    const prefix = randomFrom(getPrefixPool(base.name, rarity));
+
+    // 5. Generate stats — offhand types use their own tighter ranges, others use GEN_STAT_RANGES
+    const statBonus = { hp: 0, def: 0, dmg: 0, dex: 0, spd: 0, int: 0, luck: 0 };
+    const offhandRanges = OFFHAND_STAT_RANGES[resolvedType];
+
+    if (offhandRanges) {
+        // Offhand item: fixed primary + secondary ranges, both always present
+        const ranges = offhandRanges[rarity];
+        statBonus[base.primary]   = randInt(ranges.primary[0],   ranges.primary[1]);
+        statBonus[base.secondary] = randInt(ranges.secondary[0], ranges.secondary[1]);
+    } else {
+        // Standard item: generic ranges, secondary only at uncommon+
+        const [minV, maxV] = GEN_STAT_RANGES[rarity];
+        statBonus[base.primary] = randInt(minV, maxV);
+        if (base.secondary && rarity !== 'common') {
+            statBonus[base.secondary] = randInt(1, Math.max(1, Math.floor(maxV / 2)));
+        }
+    }
+
+    // 7. Roll for a suffix
+    // Use GEN_STAT_RANGES for suffix magnitude regardless of item type
+    const [sfxMin, sfxMax] = GEN_STAT_RANGES[rarity];
     let suffixName     = '';
     let passiveKey     = null;
     let passiveDesc    = null;
@@ -177,25 +271,25 @@ function generateItem(forcedType, forcedRarity) {
             passiveKey  = sfx.passiveKey;
             passiveDesc = sfx.passiveDesc;
         } else if (sfx.stat) {
-            const add = randInt(minV, maxV) * (sfx.mult || 1);
+            const add = randInt(sfxMin, sfxMax) * (sfx.mult || 1);
             statBonus[sfx.stat] = (statBonus[sfx.stat] || 0) + add;
         }
     } else if ((rarity === 'common' || rarity === 'uncommon') && Math.random() < 0.20) {
         const sfx      = randomFrom(NEGATIVE_SUFFIXES);
         suffixName     = sfx.name;
         suffixNegative = true;
-        const sub      = randInt(1, Math.ceil(maxV / 2)) * (sfx.mult || 1);
+        const sub      = randInt(1, Math.ceil(sfxMax / 2)) * (sfx.mult || 1);
         statBonus[sfx.stat] = (statBonus[sfx.stat] || 0) - sub;
     }
 
-    // 6. Assemble name and flavour text
+    // 8. Assemble name and flavour text
     const name        = prefix + ' ' + base.name + (suffixName ? ' ' + suffixName : '');
     const description = GEN_FLAVOUR[rarity];
 
     return new Item({
         key:           null,   // generated items have no static key
         name,
-        type:          base.type,
+        type:          base.type,   // 'shield' | 'tome' | 'orb' | 'quiver' | 'focus' for offhand items
         rarity,
         description,
         statBonus,
@@ -258,7 +352,10 @@ function upgradeItemPrefix(item) {
     const [minV, maxV] = GEN_STAT_RANGES[newRarity];
 
     // Re-scale primary stat to the new tier range while preserving excess from suffix
-    const base = BASE_ITEMS.find(b => item.name.includes(b.name)) || { primary: 'dmg' };
+    // Strip the prefix (first word) and use startsWith to avoid partial-name matches
+    // e.g. "Kite Shield" must match before "Shield" for multi-word base names
+    const basePart = item.name.split(' ').slice(1).join(' ');
+    const base = BASE_ITEMS.find(b => basePart.startsWith(b.name)) || { primary: 'dmg' };
     const newPrefix    = randomFrom(getPrefixPool(base.name, newRarity));
     const statBonus = { hp: 0, def: 0, dmg: 0, dex: 0, spd: 0, int: 0, luck: 0 };
     statBonus[base.primary] = randInt(minV, maxV);
@@ -275,10 +372,7 @@ function upgradeItemPrefix(item) {
         }
     }
 
-    // Preserve the base+suffix portion of the name, replace only the prefix
-    const words    = item.name.split(' ');
-    const basePart = words.slice(1).join(' ');
-
+    // basePart is already defined above — reuse it to build the upgraded name
     return new Item({
         key:           null,
         name:          newPrefix + ' ' + basePart,

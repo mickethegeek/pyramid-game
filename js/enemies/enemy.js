@@ -6,6 +6,8 @@ class Enemy {
     constructor(data) {
         this.name  = data.name;
         this.intro = data.intro || null;  // optional flavour text shown at combat start
+        // Store the raw data so the onDeath method can read callbacks without a key lookup
+        this.data  = data;
 
         // Enemies use flat base stats only — no permanent or run bonus layers
         this.baseStats = {
@@ -17,6 +19,21 @@ class Enemy {
         // Current HP starts at max
         this.currentHP = this.getStat('hp');
 
+        // How many turns this enemy has taken — incremented in executeEnemyTurn (combat.js)
+        this.turnCount = 0;
+
+        // 'front' | 'back' — back row enemies set explicitly in room compositions
+        this.row = 'front';
+
+        // Aggro accumulated this combat — tracked for future targeting logic
+        this.aggro = 0;
+
+        // Stores the action this enemy just executed so combatUI can telegraph it during player turns
+        this.intendedAction = null;
+
+        // Tags for special interactions — e.g. 'undead', 'demon'. No Act 1 enemies use these yet.
+        this.tags = data.tags || [];
+
         // ── Status effect state ──────────────────────────────────────────────
         // Managed by statusEffects.js — same system as characters
         this.activeEffects = [];
@@ -25,6 +42,7 @@ class Enemy {
         this.isStunned  = false;   // set by Stun — skip this enemy's turn
         this.isTaunting = false;   // set by Taunt — unused for enemies but kept for symmetry
         this.hasShield  = false;   // set by Shield — absorbs the next hit
+        this.isBlinded  = false;   // set by Blind — 35% miss chance on basic attacks
     }
 
     // ── Stat accessor ────────────────────────────────────────────────────────
@@ -41,18 +59,47 @@ class Enemy {
 
     // ── HP management ────────────────────────────────────────────────────────
 
-    // Reduce HP by amount — if a Shield is active it absorbs 70% of hit instead
-        takeDamage(amount, log) {
+    // Reduce HP by amount — if a Shield is active it absorbs 70% of hit instead.
+    // Mud Golem passive: intercepts incoming damage and shares 40% with a living partner.
+    takeDamage(amount, log) {
+        // Damage intercept: if this is a Mud Golem and a partner is alive, split the hit
+        if (this.key === 'mudGolem' && state.combat) {
+            const partner = state.combat.enemies.find(
+                e => e !== this && e.key === 'mudGolem' && e.isAlive()
+            );
+            if (partner) {
+                const myShare    = Math.ceil(amount * 0.6);
+                const theirShare = Math.floor(amount * 0.4);
+                if (log) log('Mud Golem damage is shared! (' + myShare + ' here, ' + theirShare + ' to partner)');
+                this._applyDamageRaw(myShare, log);
+                partner._applyDamageRaw(theirShare, null);
+                return;
+            }
+        }
+        this._applyDamageRaw(amount, log);
+    }
+
+    // Internal HP reduction — used directly to avoid re-triggering the Golem intercept
+    _applyDamageRaw(amount, log) {
         if (this.hasShield) {
             // Shield consumes itself and blocks 70% of damage
-            const blocked = Math.floor(amount * 0.7);
-            const remaining = amount - blocked; 
+            const blocked   = Math.floor(amount * 0.7);
+            const remaining = amount - blocked;
             removeStatusEffect(this, 'shield');
             if (log) log(this.name + "'s shield blocks " + blocked + " damage! (" + remaining + " gets through)");
             this.currentHP = Math.max(0, this.currentHP - remaining);
             return;
         }
         this.currentHP = Math.max(0, this.currentHP - amount);
+    }
+
+    // Fire the on-death callback defined in ENEMY_DATA when this enemy is defeated.
+    // party: alive party array, enemies: full enemies array, log: combat log function
+    onDeath(party, enemies, log) {
+        if (this.data && this.data.onDeath) {
+            // Pass { party, enemies } as the 'combat' arg so callbacks use combat.party / combat.enemies
+            this.data.onDeath(this, { party, enemies }, log || (() => {}));
+        }
     }
 
 
@@ -87,6 +134,13 @@ function createEnemy(key, actNumber) {
     const data = ENEMY_DATA[key];
     if (!data) throw new Error('Unknown enemy key: ' + key);
     const enemy = new Enemy(data);
+    // Store the data key so enemyAI.js can look up actions and callbacks
+    enemy.key        = key;
+    // Store attack type for Pinned check and damageCalc row rules
+    enemy.attackType = data.attackType || 'melee';
+    // Set starting row — 'random' picks front or back with equal chance
+    const rowPref = data.row || 'front';
+    enemy.row = (rowPref === 'random') ? (Math.random() < 0.5 ? 'front' : 'back') : rowPref;
 
     const mult = ACT_MULTIPLIERS[actNumber] || 1.0;
     if (mult !== 1.0) {

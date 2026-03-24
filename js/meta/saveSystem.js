@@ -11,6 +11,7 @@ const SAVE_KEY_RUN  = 'pyramid_run';
 function defaultMeta() {
     return {
         discoveredClasses:  ['warrior'],
+        discoveredSkills:   [], // skill keys seen at least once across all runs
         soulShards:         0,
         permanentUpgrades:  {}, // e.g. { warrior: { hp: 1, dmg: 2 } }
         generalUpgrades:    {}, // e.g. { goldCarry: 2, startingPartySize: 1 }
@@ -32,7 +33,12 @@ function saveMetaProgress(meta) {
 function loadMetaProgress() {
     try {
         const raw = localStorage.getItem(SAVE_KEY_META);
-        if (raw) return JSON.parse(raw);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            // Migration: add discoveredSkills to saves that predate the skill system
+            if (!parsed.discoveredSkills) parsed.discoveredSkills = [];
+            return parsed;
+        }
     } catch (e) {
         console.warn('Could not load meta progress:', e);
     }

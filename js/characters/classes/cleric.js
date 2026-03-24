@@ -12,6 +12,18 @@ const CLERIC_BASE_STATS = {
     luck:   6,  // Slightly lucky — blessings from the gods
 };
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+// Return true if the target carries an 'undead' or 'demon' tag — used by Light Cleric holy skills
+function isUndeadOrDemon(target) {
+    return target.tags && (target.tags.includes('undead') || target.tags.includes('demon'));
+}
+
+// Apply the Sacred status effect to a target (ally or enemy)
+function applySacred(target, log) {
+    applyStatusEffect(target, 'sacred', log);
+}
+
 // ─── Abilities ────────────────────────────────────────────────────────────────
 
 const CLERIC_ABILITIES = [
@@ -47,7 +59,10 @@ class Cleric extends Character {
     // Initialise with Cleric stats and abilities
     constructor() {
         super('Cleric', CLERIC_BASE_STATS);
+        this.classKey  = 'cleric';
         this.abilities = CLERIC_ABILITIES;
+        this.baseSkill = 'radiant_word';
+        this.skillLevels['radiant_word'] = 1;
     }
 
     // Cleric scales into INT to improve healing and spell damage over time

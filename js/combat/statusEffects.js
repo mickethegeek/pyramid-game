@@ -41,18 +41,25 @@ const STATUS_EFFECTS = {
             // Stun flag already set on apply; combat loop checks it
         },
         onExpire(combatant, _log) {
-            combatant.isStunned = false;
+            if (lastStack(combatant, 'stun')) combatant.isStunned = false;
         },
     },
 
-    // Bleed: low damage per turn but lasts longest
+    // Bleed: low damage per turn but lasts longest.
+    // Supports instance overrides: effect.damage (default 2), effect.bleedLinkedToPin (expiry tied to Pinned).
     bleed: {
         name:     'Bleed',
         color:    '#dc2626',
         duration: 4,
-        onTick(combatant, _effect, log) {
-            combatant.takeDamage(2);
-            log(combatant.name + ' bleeds for 2 damage!');
+        onTick(combatant, effect, log) {
+            // Pin-linked bleed (Pinning Shot): expire the moment the pin wears off
+            if (effect.bleedLinkedToPin && !combatant.isPinned) {
+                effect.turnsLeft = 0;
+                return;
+            }
+            const dmg = effect.damage || 2;
+            combatant.takeDamage(dmg);
+            log(combatant.name + ' bleeds for ' + dmg + ' damage!');
         },
     },
 
@@ -69,8 +76,10 @@ const STATUS_EFFECTS = {
             // Flag is already set; nothing to do each tick
         },
         onExpire(combatant, log) {
-            combatant.isTaunting = false;
-            log(combatant.name + "'s taunt fades.");
+            if (lastStack(combatant, 'taunt')) {
+                combatant.isTaunting = false;
+                log(combatant.name + "'s taunt fades.");
+            }
         },
     },
 
@@ -107,8 +116,8 @@ const STATUS_EFFECTS = {
             // Passive; damageCalc consumes hasShield when a hit lands
         },
         onExpire(combatant, _log) {
-            // Remove the flag in case the shield was never hit
-            combatant.hasShield = false;
+            // Only clear if no other shield stack remains
+            if (lastStack(combatant, 'shield')) combatant.hasShield = false;
         },
     },
 
@@ -159,9 +168,240 @@ const STATUS_EFFECTS = {
             log(combatant.name + "'s curse is lifted.");
         },
     },
+
+    // Blind: 35% chance each turn to miss attacks — roll happens in basicAttack (actions.js)
+    blind: {
+        name:     'Blind',
+        color:    '#6b7280',
+        duration: 2,
+        onApply(combatant, log) {
+            combatant.isBlinded = true;
+            log(combatant.name + ' is blinded! Their attacks may miss!');
+        },
+        onTick(_combatant, _effect, _log) {
+            // Flag already set on apply; miss roll is in basicAttack (actions.js)
+        },
+        onExpire(combatant, log) {
+            if (lastStack(combatant, 'blind')) {
+                combatant.isBlinded = false;
+                log(combatant.name + "'s vision clears.");
+            }
+        },
+    },
+
+    // Arcane Burn: DoT that bypasses DEF entirely — can coexist with poison simultaneously
+    arcane_burn: {
+        name:     'Arcane Burn',
+        color:    '#a78bfa',
+        duration: 3,
+        onTick(combatant, _effect, log) {
+            // takeDamage applies HP loss directly with no DEF reduction
+            combatant.takeDamage(4);
+            log(combatant.name + ' takes 4 arcane burn damage (ignores armor)!');
+        },
+    },
+
+    // Pinned: melee enemies skip their attack this turn — ranged/caster are unaffected
+    pinned: {
+        name:     'Pinned',
+        color:    '#78716c',
+        duration: 2,
+        onApply(combatant, log) {
+            combatant.isPinned = true;
+            log(combatant.name + ' is pinned and cannot advance!');
+        },
+        onTick(_combatant, _effect, _log) {
+            // Flag already set; melee skip is checked in executeEnemyTurn (combat.js)
+        },
+        onExpire(combatant, log) {
+            if (lastStack(combatant, 'pinned')) {
+                combatant.isPinned = false;
+                log(combatant.name + ' breaks free from the pin!');
+            }
+        },
+    },
+
+    // Sacred: allies receive 30% stronger heals; enemies take 30% more from holy-tagged skills
+    sacred: {
+        name:     'Sacred',
+        color:    '#fef08a',
+        duration: 3,
+        onApply(combatant, log) {
+            combatant.isSacred = true;
+            log(combatant.name + ' is bathed in Sacred light!');
+        },
+        onTick(_combatant, _effect, _log) {
+            // Passive flag — healing code multiplies by 1.3 for allies;
+            // holy abilities multiply damage by 1.3 for enemies, both check isSacred
+        },
+        onExpire(combatant, log) {
+            if (lastStack(combatant, 'sacred')) {
+                combatant.isSacred = false;
+                log(combatant.name + "'s Sacred aura fades.");
+            }
+        },
+    },
+
+    // Fortify: +10 DEF for 1 turn — applied when a passive-personality enemy defends
+    fortify: {
+        name:     'Fortified',
+        color:    '#60a5fa',
+        duration: 1,
+        onApply(combatant, log) {
+            modStat(combatant, 'def', +10);
+            log(combatant.name + ' fortifies its defenses! (+10 DEF)');
+        },
+        onTick(_combatant, _effect, _log) {},
+        onExpire(combatant, _log) {
+            modStat(combatant, 'def', -10);
+        },
+    },
+
+    // Harden: +15 DEF for 2 turns — Mud Golem's Harden ability
+    harden: {
+        name:     'Hardened',
+        color:    '#78716c',
+        duration: 2,
+        onApply(combatant, log) {
+            modStat(combatant, 'def', +15);
+            log(combatant.name + ' hardens! (+15 DEF for 2 turns)');
+        },
+        onTick(_combatant, _effect, _log) {},
+        onExpire(combatant, log) {
+            modStat(combatant, 'def', -15);
+            log(combatant.name + "'s hardened shell crumbles.");
+        },
+    },
+
+    // Bloat: +10 DEF and -4 SPD for 2 turns — Swamp Crawler's Bloat ability
+    bloat: {
+        name:     'Bloated',
+        color:    '#6b7280',
+        duration: 2,
+        onApply(combatant, log) {
+            modStat(combatant, 'def', +10);
+            modStat(combatant, 'spd', -4);
+            log(combatant.name + ' bloats up! (+10 DEF, -4 SPD for 2 turns)');
+        },
+        onTick(_combatant, _effect, _log) {},
+        onExpire(combatant, log) {
+            modStat(combatant, 'def', -10);
+            modStat(combatant, 'spd', +4);
+            log(combatant.name + "'s bloat subsides. (-10 DEF, +4 SPD)");
+        },
+    },
+
+    // Embolden: dynamic DMG bonus stored per-instance — Bog Witch Cackle ability.
+    // Each stack carries its own bonus amount so multiple cackles reverse independently.
+    embolden: {
+        name:     'Emboldened',
+        color:    '#f97316',
+        duration: 2,
+        onApply(combatant, _log, instance) {
+            // instance.bonus is set by the caller via applyStatusEffect(..., { bonus })
+            modStat(combatant, 'dmg', +instance.bonus);
+        },
+        onTick(_combatant, _effect, _log) {},
+        onExpire(combatant, log, instance) {
+            modStat(combatant, 'dmg', -instance.bonus);
+            log(combatant.name + "'s emboldened effect fades.");
+        },
+    },
+
+    // Iron Will: temporary damage reduction buff from the Warrior skill
+    // instance.damageReduction (0.40 or 0.60) and optional instance.defBonus are set by the skill
+    iron_will_buff: {
+        name:     'Iron Will',
+        color:    '#94a3b8',
+        duration: 1,
+        onApply(combatant, log, instance) {
+            combatant.damageReduction = instance.damageReduction || 0.40;
+            if (instance.defBonus) modStat(combatant, 'def', instance.defBonus);
+            log(combatant.name + ' steels themselves — incoming damage reduced by ' +
+                Math.round(combatant.damageReduction * 100) + '%!');
+        },
+        onTick(combatant, _effect, _log) {
+            // Grant a guaranteed crit on next Power Strike if HP is critically low
+            if (combatant.currentHP < combatant.getMaxHP() * 0.30) {
+                combatant.ironWillCrit = true;
+            }
+        },
+        onExpire(combatant, log, instance) {
+            combatant.damageReduction = 0;
+            if (instance.defBonus) modStat(combatant, 'def', -instance.defBonus);
+            log(combatant.name + "'s Iron Will fades.");
+        },
+    },
+
+    // Battle Hardened: short DEF buff applied by Shield Bash at levels 2+
+    // instance.damageReduction is set by the skill (0.10 or 0.20)
+    battle_hardened: {
+        name:     'Battle Hardened',
+        color:    '#60a5fa',
+        duration: 1,
+        onApply(combatant, log, instance) {
+            combatant.damageReduction = instance.damageReduction || 0.10;
+            log(combatant.name + ' braces hard — incoming damage reduced by ' +
+                Math.round(combatant.damageReduction * 100) + '%!');
+        },
+        onTick(_combatant, _effect, _log) {},
+        onExpire(combatant, log) {
+            combatant.damageReduction = 0;
+            log(combatant.name + "'s Battle Hardened buff fades.");
+        },
+    },
+
+    // Last Stand: one-turn death immunity + damage boost applied by the Warrior skill
+    // instance.dmgBonus is the flat DMG added (stored so onExpire can reverse it exactly)
+    last_stand_buff: {
+        name:     'Last Stand',
+        color:    '#dc2626',
+        duration: 1,
+        onApply(combatant, log, instance) {
+            combatant.deathImmune = true;
+            const dmgBonus = Math.max(1, Math.floor(combatant.getStat('dmg') * 0.5));
+            instance.dmgBonus = dmgBonus;
+            modStat(combatant, 'dmg', dmgBonus);
+            log(combatant.name + ' makes their Last Stand! Immune to death and +' + dmgBonus + ' DMG!');
+        },
+        onTick(_combatant, _effect, _log) {},
+        onExpire(combatant, log, instance) {
+            if (combatant.deathImmune) combatant.deathImmune = false;
+            modStat(combatant, 'dmg', -instance.dmgBonus);
+            log(combatant.name + "'s Last Stand fades.");
+        },
+    },
+
+    // Retribution: reflects 20% of raw incoming damage back at the attacker before armor
+    retribution: {
+        name:     'Retribution',
+        color:    '#f59e0b',
+        duration: 3,
+        onApply(combatant, log) {
+            // Store the reflect fraction on the combatant so basicAttack can read it
+            combatant.retributionReflect = 0.20;
+            log(combatant.name + ' crackles with Retribution! 20% of incoming damage is reflected!');
+        },
+        onTick(_combatant, _effect, _log) {
+            // Reflection is handled in basicAttack (actions.js) on each incoming hit
+        },
+        onExpire(combatant, log) {
+            if (lastStack(combatant, 'retribution')) {
+                combatant.retributionReflect = 0;
+                log(combatant.name + "'s Retribution fades.");
+            }
+        },
+    },
 };
 
-// ─── Private helper ────────────────────────────────────────────────────────────
+// ─── Private helpers ───────────────────────────────────────────────────────────
+
+// Return true if this is the only remaining stack of key on the combatant.
+// Used by flag-based onExpire callbacks so the flag is only cleared on the last stack.
+// The expiring instance is still in activeEffects when onExpire fires, so <= 1 is correct.
+function lastStack(combatant, key) {
+    return (combatant.activeEffects || []).filter(e => e.key === key).length <= 1;
+}
 
 // Modify a stat by delta, targeting the correct layer for Character vs Enemy.
 // Character uses runBonus (which getStat() already adds in).
@@ -179,27 +419,21 @@ function modStat(combatant, stat, delta) {
 // ─── Public API ────────────────────────────────────────────────────────────────
 
 // Apply a status effect to a combatant by effect key.
-// If the effect is already active, the duration simply resets (no stacking yet).
-function applyStatusEffect(combatant, key, log) {
+// options: optional extra data merged into the instance (e.g. { bonus: 5 } for embolden).
+// The instance is passed as a third arg to onApply/onExpire so effects can read stored data.
+function applyStatusEffect(combatant, key, log, options) {
     const def = STATUS_EFFECTS[key];
     if (!def) { console.warn('Unknown status effect key: ' + key); return; }
 
     // Lazy-init the active effects list
     if (!combatant.activeEffects) combatant.activeEffects = [];
 
-    // If already present, just reset duration — don't double-apply onApply
-    const existing = combatant.activeEffects.find(e => e.key === key);
-    if (existing) {
-        existing.turnsLeft = def.duration;
-        return;
-    }
-
-    // Add a new effect instance
-    const instance = { key, turnsLeft: def.duration };
+    // Merge any extra data into the instance so callbacks (e.g. embolden) can read it on expire
+    const instance = { key, turnsLeft: def.duration, ...(options || {}) };
     combatant.activeEffects.push(instance);
 
-    // Fire the apply callback if defined
-    if (def.onApply) def.onApply(combatant, log);
+    // Fire the apply callback if defined — passes instance so dynamic effects can initialise
+    if (def.onApply) def.onApply(combatant, log, instance);
 }
 
 // Tick all active effects on a combatant, then remove any that have expired.
@@ -214,11 +448,12 @@ function tickStatusEffects(combatant, log) {
         effect.turnsLeft--;
     }
 
-    // Remove effects that have run their course and fire their expiry callbacks
+    // Remove effects that have run their course and fire their expiry callbacks.
+    // The instance is passed as third arg so effects like embolden can read stored data (e.g. bonus).
     combatant.activeEffects = combatant.activeEffects.filter(effect => {
         if (effect.turnsLeft <= 0) {
             const def = STATUS_EFFECTS[effect.key];
-            if (def && def.onExpire) def.onExpire(combatant, log);
+            if (def && def.onExpire) def.onExpire(combatant, log, effect);
             return false; // drop from array
         }
         return true; // keep active
@@ -237,9 +472,10 @@ function removeStatusEffect(combatant, key) {
     const idx = combatant.activeEffects.findIndex(e => e.key === key);
     if (idx === -1) return;
 
-    // Fire the expiry callback so stat changes are properly reversed
+    // Pass the instance so expiry callbacks (e.g. embolden) can read stored data
+    const instance = combatant.activeEffects[idx];
     const def = STATUS_EFFECTS[key];
-    if (def && def.onExpire) def.onExpire(combatant, () => {});
+    if (def && def.onExpire) def.onExpire(combatant, () => {}, instance);
 
     combatant.activeEffects.splice(idx, 1);
 }

@@ -45,7 +45,10 @@ class Wizard extends Character {
     // Initialise with Wizard stats and abilities
     constructor() {
         super('Wizard', WIZARD_BASE_STATS);
+        this.classKey  = 'wizard';
         this.abilities = WIZARD_ABILITIES;
+        this.baseSkill = 'arcane_bolt';
+        this.skillLevels['arcane_bolt'] = 1;
     }
 
     // Wizard pours everything into INT — every level the spells hit harder

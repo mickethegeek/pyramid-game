@@ -12,38 +12,6 @@ const SUMMONER_BASE_STATS = {
     luck:  12,  // High luck — fortunate conjurer
 };
 
-// ─── Familiar factory ─────────────────────────────────────────────────────────
-
-// Create a fresh familiar object; owner is the Summoner who summoned it.
-// The familiar acts autonomously in the initiative queue (isPlayer: false, isFamiliar: true).
-function createFamiliar(owner) {
-    return {
-        name:      'Familiar',
-        maxHP:     30,
-        currentHP: 30,
-        def:       0,
-        dmg:       5,
-        spd:       6,
-        isFamiliar: true,
-        owner:     owner,
-        isStunned:  false,
-        isTaunting: false,
-        isAlive()     { return this.currentHP > 0; },
-        // Return flat stat values — the familiar has no stat layers
-        getStat(stat) {
-            const map = { hp: this.maxHP, def: this.def, dmg: this.dmg,
-                          spd: this.spd, int: 0, dex: 0, luck: 0 };
-            return map[stat] !== undefined ? map[stat] : 0;
-        },
-        getMaxHP()    { return this.maxHP; },
-        takeDamage(dmg) {
-            const reduced = Math.max(0, dmg - this.def);
-            this.currentHP = Math.max(0, this.currentHP - reduced);
-        },
-        tickStatusEffects(_log) {},  // no status effects for now
-    };
-}
-
 // ─── Abilities ────────────────────────────────────────────────────────────────
 
 const SUMMONER_ABILITIES = [
@@ -55,12 +23,13 @@ const SUMMONER_ABILITIES = [
 
         // Create the familiar and inject it into the combat queue
         use(self, _target, log, combat) {
-            if (self.familiar) {
-                log('A familiar is already fighting for ' + self.name + '!');
+            if (state.activeFamiliar) {
+                log('A familiar is already active!');
                 return;
             }
-            const familiar = createFamiliar(self);
-            self.familiar  = familiar;
+            const familiar       = createFamiliar(self);
+            self.familiar        = familiar;
+            state.activeFamiliar = familiar;
             injectFamiliarIntoQueue(combat, familiar);
             log(self.name + ' summons a Familiar! (HP ' + familiar.maxHP
                 + ', DMG ' + familiar.dmg + ', SPD ' + familiar.spd + ')');
@@ -114,10 +83,10 @@ const SUMMONER_ABILITIES = [
             }
 
             if (isFamiliar) {
-                // Absorb familiar — restore HP to the summoner
+                // Absorb familiar — restore HP to the summoner, then recall it
                 const restored = Math.min(20, self.getMaxHP() - self.currentHP);
                 devourTarget.currentHP = 0;
-                self.familiar = null;
+                devourTarget.onRecall();   // clears self.familiar + state.activeFamiliar
                 self.currentHP += restored;
                 log(self.name + ' devours the Familiar and recovers ' + restored + ' HP!');
             } else {
@@ -141,9 +110,18 @@ class Summoner extends Character {
     // Initialise with Summoner stats, abilities, a null familiar slot, and cooldown counter
     constructor() {
         super('Summoner', SUMMONER_BASE_STATS);
+        this.classKey       = 'summoner';
         this.abilities      = SUMMONER_ABILITIES;
+        this.baseSkill      = 'call_familiar';
+        // call_familiar level determines which familiar is available:
+        // level 1 = Dog, 2 = Snake, 3 = Crow, 4 = Bats, 5 = Golem
+        this.skillLevels['call_familiar'] = 1;
         this.familiar       = null;  // Populated by Summon Familiar; cleared by Devour or death
         this.devourCooldown = 0;     // Turns until Devour can be used again
+        // Hybrid class — keeps mana and also has a smaller stamina pool
+        this.maxStamina     = 6;
+        this.currentStamina = 6;
+        this.staminaRegen   = 2;
     }
 
     // Summoner scales into INT for better mana sustain and eventual familiar upgrades

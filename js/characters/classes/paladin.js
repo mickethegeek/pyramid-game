@@ -46,7 +46,14 @@ class Paladin extends Character {
     // Initialise with Paladin stats and abilities
     constructor() {
         super('Paladin', PALADIN_BASE_STATS);
+        this.classKey  = 'paladin';
         this.abilities = PALADIN_ABILITIES;
+        this.baseSkill = 'retribution_strike';
+        this.skillLevels['retribution_strike'] = 1;
+        // Physical class — uses stamina alongside mana (Paladin is a hybrid tank-healer)
+        this.maxStamina     = 10;
+        this.currentStamina = 10;
+        this.staminaRegen   = 3;
     }
 
     // Paladin scales into survivability — more armour and spell support each level

@@ -46,7 +46,16 @@ class Warrior extends Character {
     // Initialise with Warrior stats and attach the ability list
     constructor() {
         super('Warrior', WARRIOR_BASE_STATS);
+        this.classKey  = 'warrior';
         this.abilities = WARRIOR_ABILITIES;
+        this.baseSkill = 'power_strike';
+        this.skillLevels['power_strike'] = 1;
+        // Physical class — uses stamina instead of mana for physical abilities
+        this.maxStamina     = 10;
+        this.currentStamina = 10;
+        this.staminaRegen   = 3;
+        // Stance: 'battle' (+20% damage dealt) | 'guard' (-25% damage taken) — free action to switch
+        this.stance = 'battle';
     }
 
     // Warrior levels up with extra HP and DEF focus instead of the generic split
@@ -67,5 +76,11 @@ class Warrior extends Character {
 function createWarrior() {
     const c = new Warrior();
     c.classKey = 'warrior';
+    updateWarriorLoadout(c);  // sets activeLoadout from starting equipment
     return c;
+}
+
+// Toggle the Warrior's stance between 'battle' and 'guard'
+function switchStance(warrior) {
+    warrior.stance = (warrior.stance === 'battle') ? 'guard' : 'battle';
 }
