@@ -399,7 +399,7 @@ const SKILL_DATA = {
         maxLevel:    5,
         isBaseSkill: true,
         currentLevel: 1,
-        scalingStat: 'dmg',       // STR maps to DMG per CLAUDE.md
+        scalingStat: 'dmg',
         attackType:  'single',
         chargeUp:    false,
         upgradeChain: ['retribution_strike', 'avengers_strike', 'crusaders_wrath', 'shield_of_wrath', 'divine_retribution'],
@@ -441,8 +441,8 @@ const SKILL_DATA = {
         rarity:      'uncommon',
         maxLevel:    3,
         currentLevel: 1,
-        scalingStat: 'int',       // WIS maps to INT per CLAUDE.md
-        attackType:  'single',    // ally targeting wired in a later prompt
+        scalingStat: 'int',
+        attackType:  'single',
         chargeUp:    false,
         upgradeChain: ['aegis', 'bulwark', 'fortress'],
         levels: {
@@ -472,9 +472,9 @@ const SKILL_DATA = {
         rarity:      'rare',
         maxLevel:    2,
         currentLevel: 1,
-        scalingStat: 'int',
-        attackType:  'self',
-        chargeUp:    false,
+        scalingStat:  'int',
+        attackType:   'self',
+        chargeUp:     false,
         upgradeChain: ['holy_aura', 'sacred_aura'],
         levels: {
             1: { name: 'Holy Aura',   description: 'Party: 20% DR for 3 turns.',                                        manaCost: 4 },
@@ -516,8 +516,8 @@ const SKILL_DATA = {
             1: { name: "Martyr's Resolve", description: 'Charge 2t. STR×3 + WIS×1.5 dmg. Taunt 3t + Retribution 50% 3t armor-pierce on self. Shield all allies WIS×1.5 temp HP.', manaCost: 6 },
         },
         effect: (caster, target, level, log) => {
-            const strStat = caster.getStat('dmg');  // STR = DMG per CLAUDE.md
-            const wisStat = caster.getStat('int');  // WIS = INT per CLAUDE.md
+            const strStat = caster.getStat('dmg');
+            const wisStat = caster.getStat('int');
 
             // Combined damage: STR×3.0 + WIS×1.5, reduced by target's armor
             const rawVal       = strStat * 3.0 + wisStat * 1.5;
