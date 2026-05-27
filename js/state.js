@@ -75,6 +75,22 @@ const state = {
     // Characters read from this pool when equipping skills; skills are returned here on unequip.
     sharedSkillInventory: [],
 
+    // Active familiar units — array of all current familiar combatants.
+    // state.activeFamiliar is kept in sync as a legacy single-familiar reference.
+    activeFamiliars: [],
+
+    // Bat swarm DEF-reduction aura flag — set true while any bat is alive
+    batAuraActive: false,
+
+    // Herald presence flag — set true while the Herald familiar is alive
+    heraldActive: false,
+
+    // Global settings — tweak these without touching logic files
+    settings: {
+        enemyTurnDelay:  700,   // ms between player action and enemy response
+        chargeTickDelay: 700,   // ms between charge-up turns
+    },
+
     // Act 1 composition queue — shuffled at run start, consumed one-by-one as combat rooms are entered.
     // Compositions are never discarded on skip — they stay at the front until actually used.
     // When empty, combat rooms fall back to random Act 1 enemy selection.

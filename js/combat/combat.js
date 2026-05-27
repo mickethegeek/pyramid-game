@@ -411,7 +411,7 @@ function executeFamiliarTurn(combat) {
 // Call this instead of executeEnemyTurn() so the player can read what just happened.
 function scheduleEnemyTurn(combat) {
     combat.pendingEnemyTurn = true;
-    combat.enemyTurnTime    = performance.now() + 700;
+    combat.enemyTurnTime    = performance.now() + (state.settings.enemyTurnDelay);
 }
 
 // ─── Charge-up scheduling ──────────────────────────────────────────────────────
@@ -419,7 +419,7 @@ function scheduleEnemyTurn(combat) {
 // Schedule an automatic charge tick for a charging player — same delay as enemy turns.
 function scheduleChargeTick(combat) {
     combat.pendingChargeTick = true;
-    combat.chargeTickTime    = performance.now() + 700;
+    combat.chargeTickTime    = performance.now() + (state.settings.chargeTickDelay);
 }
 
 // Process one automatic tick of a charge-up ability on the currently-acting character.
