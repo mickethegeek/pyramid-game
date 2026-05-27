@@ -1,6 +1,17 @@
 // All skill definitions — one entry per skill key, all 7 classes.
 // effect() functions are placeholders; real logic added per class in follow-up prompts.
 
+// RESOURCE SYSTEM
+// Stamina classes: Warrior, Barbarian, Paladin
+//   - Max 10, regens 3 per turn passively
+//   - Basic attack costs 0
+//   - Skills cost stamina
+// Mana classes: Archer, Cleric, Wizard, Summoner
+//   - Max 10, no passive regen
+//   - Basic attack restores 2 mana, costs 0
+//   - Skills cost mana
+// All placeholder costs of 3 have been replaced below with final values.
+
 const SKILL_DATA = {
 
     // ── ARCHER ───────────────────────────────────────────────────────────────
@@ -16,11 +27,11 @@ const SKILL_DATA = {
         chargeUp: false,
         upgradeChain: ['piercing_shot', 'keen_shot', 'puncture', 'armor_splitter', 'rending_arrow'],
         levels: {
-            1: { name: 'Piercing Shot',   description: '1.5x DEX. Ignores armor.',                                        manaCost: 3 },
-            2: { name: 'Keen Shot',        description: '1.8x DEX. Ignores armor + 10% bleed chance.',                     manaCost: 3 },
+            1: { name: 'Piercing Shot',   description: '1.5x DEX. Ignores armor.',                                        manaCost: 2 },
+            2: { name: 'Keen Shot',        description: '1.8x DEX. Ignores armor + 10% bleed chance.',                     manaCost: 2 },
             3: { name: 'Puncture',         description: '2.2x DEX. Ignores armor + 20% bleed chance.',                     manaCost: 3 },
             4: { name: 'Armor Splitter',   description: '2.6x DEX. Ignores armor + -20% armor debuff.',                    manaCost: 3 },
-            5: { name: 'Rending Arrow',    description: '3.0x DEX. Ignores armor + stackable -20% armor debuff.',          manaCost: 3 },
+            5: { name: 'Rending Arrow',    description: '3.0x DEX. Ignores armor + stackable -20% armor debuff.',          manaCost: 4 },
         },
         effect: (caster, target, level, log) => {
             const MULTS     = [0, 1.5, 1.8, 2.2, 2.6, 3.0];
@@ -122,8 +133,8 @@ const SKILL_DATA = {
         chargeUp: false,
         upgradeChain: ['volley', 'storm_of_arrows'],
         levels: {
-            1: { name: 'Volley',            description: '0.8x DEX to all enemies.',                                          manaCost: 3 },
-            2: { name: 'Storm of Arrows',   description: '1.2x DEX to all enemies + 15% bleed chance each.',                  manaCost: 3 },
+            1: { name: 'Volley',            description: '0.8x DEX to all enemies.',                                          manaCost: 4 },
+            2: { name: 'Storm of Arrows',   description: '1.2x DEX to all enemies + 15% bleed chance each.',                  manaCost: 4 },
         },
         effect: (caster, targets, level, log) => {
             const rowMult = caster.row !== 'back' ? 0.7 : 1.0;
@@ -171,7 +182,7 @@ const SKILL_DATA = {
         chargeUp: false,
         upgradeChain: ['eclipse'],
         levels: {
-            1: { name: 'Eclipse',   description: '2.0x DEX to all enemies. Applies Blind to all for 2 turns.',    manaCost: 3 },
+            1: { name: 'Eclipse',   description: '2.0x DEX to all enemies. Applies Blind to all for 2 turns.',    manaCost: 5 },
         },
         effect: (caster, _targets, level, log) => {
             const rowMult = caster.row !== 'back' ? 0.7 : 1.0;
@@ -202,11 +213,11 @@ const SKILL_DATA = {
         chargeUp: false,
         upgradeChain: ['radiant_word', 'healing_light', 'mending_prayer', 'restoration', 'divine_renewal'],
         levels: {
-            1: { name: 'Radiant Word',    description: 'Heal one ally for 1.5x INT.',                                                      manaCost: 3 },
-            2: { name: 'Healing Light',   description: 'Heal one ally for 2.0x INT. Grants Sacred for 1 turn.',                            manaCost: 3 },
+            1: { name: 'Radiant Word',    description: 'Heal one ally for 1.5x INT.',                                                      manaCost: 2 },
+            2: { name: 'Healing Light',   description: 'Heal one ally for 2.0x INT. Grants Sacred for 1 turn.',                            manaCost: 2 },
             3: { name: 'Mending Prayer',  description: 'Heal one ally for 2.5x INT. Grants Sacred + cleanses 1 debuff.',                   manaCost: 3 },
             4: { name: 'Restoration',     description: 'Heal one ally for 3.0x INT. Grants Sacred + cleanses all debuffs.',                manaCost: 3 },
-            5: { name: 'Divine Renewal',  description: 'Heal one ally for 3.5x INT. Grants Sacred + cleanses all debuffs + Bless.',        manaCost: 3 },
+            5: { name: 'Divine Renewal',  description: 'Heal one ally for 3.5x INT. Grants Sacred + cleanses all debuffs + Bless.',        manaCost: 4 },
         },
         effect: (caster, target, level, log) => {
             // Step 1: enemy clicked — store it and hold the turn open for ally selection
@@ -228,9 +239,9 @@ const SKILL_DATA = {
         chargeUp: false,
         upgradeChain: ['consecrate', 'holy_ground', 'sanctified_zone'],
         levels: {
-            1: { name: 'Consecrate',        description: 'INT×0.8 holy damage to all enemies. INT×0.5 heal to all allies.',                                       manaCost: 3 },
-            2: { name: 'Holy Ground',        description: 'INT×1.1 holy damage to all enemies. INT×0.8 heal to all allies. Marks enemies Sacred.',               manaCost: 3 },
-            3: { name: 'Sanctified Zone',    description: 'INT×1.4 holy damage to all enemies. INT×1.1 heal to all allies. Sacred all enemies + 20% DR party.', manaCost: 3 },
+            1: { name: 'Consecrate',        description: 'INT×0.8 holy damage to all enemies. INT×0.5 heal to all allies.',                                       manaCost: 4 },
+            2: { name: 'Holy Ground',        description: 'INT×1.1 holy damage to all enemies. INT×0.8 heal to all allies. Marks enemies Sacred.',               manaCost: 4 },
+            3: { name: 'Sanctified Zone',    description: 'INT×1.4 holy damage to all enemies. INT×1.1 heal to all allies. Sacred all enemies + 20% DR party.', manaCost: 4 },
         },
         effect: (caster, targets, level, log) => {
             const DMG_MULTS  = [0, 0.8, 1.1, 1.4];
@@ -326,7 +337,7 @@ const SKILL_DATA = {
         chargeUp: false,
         upgradeChain: ['divine_intervention'],
         levels: {
-            1: { name: 'Divine Intervention',   description: 'INT×2 holy damage all enemies. Full heal lowest ally + INT×1.5 to rest. Crisis: Sacred+Stun all enemies.', manaCost: 3 },
+            1: { name: 'Divine Intervention',   description: 'INT×2 holy damage all enemies. Full heal lowest ally + INT×1.5 to rest. Crisis: Sacred+Stun all enemies.', manaCost: 6 },
         },
         effect: (caster, targets, level, log) => {
             const intStat = caster.getStat('int');
@@ -382,81 +393,157 @@ const SKILL_DATA = {
     // ── PALADIN ───────────────────────────────────────────────────────────────
 
     retribution_strike: {
-        key: 'retribution_strike',
-        class: 'paladin',
-        rarity: 'common',
-        maxLevel: 5,
+        key:         'retribution_strike',
+        class:       'paladin',
+        rarity:      'common',
+        maxLevel:    5,
+        isBaseSkill: true,
         currentLevel: 1,
-        scalingStat: 'dmg',
-        attackType: 'single',
-        chargeUp: false,
-        upgradeChain: ['retribution_strike', 'righteous_blow', 'crusader_strike', 'holy_retribution', 'wrath_of_the_just'],
+        scalingStat: 'dmg',       // STR maps to DMG per CLAUDE.md
+        attackType:  'single',
+        chargeUp:    false,
+        upgradeChain: ['retribution_strike', 'avengers_strike', 'crusaders_wrath', 'shield_of_wrath', 'divine_retribution'],
         levels: {
-            1: { name: 'Retribution Strike',    description: '1.5x DMG. Bonus holy damage equal to 0.5x INT.',                         manaCost: 3 },
-            2: { name: 'Righteous Blow',         description: '1.8x DMG. Bonus holy damage equal to 0.8x INT.',                        manaCost: 3 },
-            3: { name: 'Crusader Strike',        description: '2.0x DMG. Bonus holy damage equal to 1.0x INT. 15% Blind.',             manaCost: 3 },
-            4: { name: 'Holy Retribution',       description: '2.3x DMG. Bonus holy damage equal to 1.2x INT. 20% Blind.',             manaCost: 3 },
-            5: { name: 'Wrath of the Just',      description: '2.8x DMG. Bonus holy damage equal to 1.5x INT. 30% Blind.',             manaCost: 3 },
+            1: { name: 'Retribution Strike', description: '1.4x STR. Taunt 1t + Retribution 15% 1t on self.',                   manaCost: 3 },
+            2: { name: "Avenger's Strike",   description: '1.6x STR. Taunt 1t + Retribution 20% 2t on self.',                   manaCost: 3 },
+            3: { name: "Crusader's Wrath",   description: '1.9x STR. Taunt 2t + Retribution 25% 2t on self.',                   manaCost: 4 },
+            4: { name: 'Shield of Wrath',    description: '2.2x STR. Taunt 2t + Retribution 30% 2t armor-pierce on self.',      manaCost: 4 },
+            5: { name: 'Divine Retribution', description: '2.6x STR. Taunt 3t + Retribution 40% 3t armor-pierce on self.',      manaCost: 5 },
         },
-        effect: (caster, target, level) => {
-            console.log(`[retribution_strike] ${caster.name} uses Retribution Strike (level ${level})`);
+        effect: (caster, target, level, log) => {
+            const MULTS        = [0, 1.4, 1.6, 1.9, 2.2, 2.6];
+            const TAUNT_TURNS  = [0, 1,   1,   2,   2,   3  ];
+            const REFLECT_FRAC = [0, 0.15, 0.20, 0.25, 0.30, 0.40];
+            const RETRIB_DUR   = [0, 1,   2,   2,   2,   3  ];
+            const ARMOR_PIERCE = [0, false, false, false, true, true];
+
+            const result = calculateDamage(caster, target, MULTS[level], false, 'melee');
+            applyDamage(caster, target, result.damage, result.rawDamage, log);
+            const msg = result.isCrit
+                ? 'CRITICAL! ' + caster.name + ' strikes ' + target.name + ' for ' + result.damage + '!'
+                : caster.name + ' strikes ' + target.name + ' for ' + result.damage + ' damage!';
+            log(msg);
+            caster.aggro += Math.floor(result.damage * 0.5);
+
+            // Taunt and Retribution apply to the CASTER, drawing and reflecting enemy hits
+            applyStatusEffect(caster, 'taunt', log, { turnsLeft: TAUNT_TURNS[level] });
+            applyStatusEffect(caster, 'retribution', log, {
+                reflectFraction: REFLECT_FRAC[level],
+                turnsLeft:       RETRIB_DUR[level],
+                armorPierce:     ARMOR_PIERCE[level],
+            });
         },
     },
 
     aegis: {
-        key: 'aegis',
-        class: 'paladin',
-        rarity: 'uncommon',
-        maxLevel: 3,
+        key:         'aegis',
+        class:       'paladin',
+        rarity:      'uncommon',
+        maxLevel:    3,
         currentLevel: 1,
-        scalingStat: 'def',
-        attackType: 'single',
-        chargeUp: false,
-        upgradeChain: ['aegis', 'stalwart_shield', 'fortress_stance'],
+        scalingStat: 'int',       // WIS maps to INT per CLAUDE.md
+        attackType:  'single',    // ally targeting wired in a later prompt
+        chargeUp:    false,
+        upgradeChain: ['aegis', 'bulwark', 'fortress'],
         levels: {
-            1: { name: 'Aegis',             description: 'Grant Shield to self or one ally. Absorbs the next hit.',                         manaCost: 3 },
-            2: { name: 'Stalwart Shield',    description: 'Grant Shield to self and one ally. +10% DEF for 2 turns.',                       manaCost: 3 },
-            3: { name: 'Fortress Stance',    description: 'Grant Shield to all allies. +15% DEF to all for 2 turns.',                       manaCost: 3 },
+            1: { name: 'Aegis',    description: 'Shield one ally for WIS×1.0 temp HP.',                                    manaCost: 3 },
+            2: { name: 'Bulwark',  description: 'Shield one ally for WIS×1.5 temp HP + 10% DR while shield holds.',       manaCost: 3 },
+            3: { name: 'Fortress', description: 'Shield one ally for WIS×2.0 temp HP + 20% DR. Stuns attacker on break.', manaCost: 3 },
         },
-        effect: (caster, target, level) => {
-            console.log(`[aegis] ${caster.name} uses Aegis (level ${level})`);
+        effect: (caster, target, level, log) => {
+            const WIS_MULTS = [0, 1.0, 1.5, 2.0];
+            const DR_VALS   = [0, 0,   0.10, 0.20];
+            const FORTRESS  = [0, false, false, true];
+
+            const amount = Math.round(caster.getStat('int') * WIS_MULTS[level]);
+            applyStatusEffect(target, 'temp_shield', log, {
+                amount,
+                damageReduction: DR_VALS[level],
+                fortress:        FORTRESS[level],
+            });
+            // Fortress stun-on-break handled in damageCalc.js
+            caster.aggro += 10;
         },
     },
 
     holy_aura: {
-        key: 'holy_aura',
-        class: 'paladin',
-        rarity: 'rare',
-        maxLevel: 2,
+        key:         'holy_aura',
+        class:       'paladin',
+        rarity:      'rare',
+        maxLevel:    2,
         currentLevel: 1,
         scalingStat: 'int',
-        attackType: 'single',
-        chargeUp: false,
-        upgradeChain: ['holy_aura', 'divine_aura'],
+        attackType:  'self',
+        chargeUp:    false,
+        upgradeChain: ['holy_aura', 'sacred_aura'],
         levels: {
-            1: { name: 'Holy Aura',      description: 'Apply Sacred to all allies for 2 turns. Heal all allies for 1.0x INT.',             manaCost: 3 },
-            2: { name: 'Divine Aura',    description: 'Apply Sacred + Bless to all allies for 3 turns. Heal all for 1.5x INT.',            manaCost: 3 },
+            1: { name: 'Holy Aura',   description: 'Party: 20% DR for 3 turns.',                                        manaCost: 4 },
+            2: { name: 'Sacred Aura', description: 'Party: 35% DR for 3 turns + WIS×0.3 heal per turn for 3 turns.',    manaCost: 4 },
         },
-        effect: (caster, target, level) => {
-            console.log(`[holy_aura] ${caster.name} uses Holy Aura (level ${level})`);
+        effect: (caster, _target, level, log) => {
+            const DR     = [0, 0.20, 0.35];
+            const living = state.party.filter(m => m.isAlive());
+
+            for (const member of living) {
+                member.damageReduction      = DR[level];
+                member.damageReductionTurns = 3;
+
+                if (level >= 2) {
+                    member.sacredAuraHeal  = Math.round(caster.getStat('int') * 0.3);
+                    member.sacredAuraTurns = 3;
+                    // sacredAuraTurns tick and aggro wired in Prompt 17b
+                }
+            }
+
+            log(caster.name + ' radiates Holy Aura — party gains ' +
+                (DR[level] * 100) + '% damage reduction for 3 turns!');
+            caster.aggro += 15;
         },
     },
 
     martyrs_resolve: {
-        key: 'martyrs_resolve',
-        class: 'paladin',
-        rarity: 'legendary',
-        maxLevel: 1,
+        key:         'martyrs_resolve',
+        class:       'paladin',
+        rarity:      'legendary',
+        maxLevel:    1,
         currentLevel: 1,
-        scalingStat: 'hp',
-        attackType: 'single',
-        chargeUp: true,
+        scalingStat: 'dmg',
+        attackType:  'single',
+        chargeUp:    true,
+        chargeTurns: 2,
         upgradeChain: ['martyrs_resolve'],
         levels: {
-            1: { name: "Martyr's Resolve",  description: 'Charge 1 turn. Next turn: sacrifice 40% current HP to deal 3x that value as holy damage to one enemy. Heal all allies for half the damage dealt.', manaCost: 3 },
+            1: { name: "Martyr's Resolve", description: 'Charge 2t. STR×3 + WIS×1.5 dmg. Taunt 3t + Retribution 50% 3t armor-pierce on self. Shield all allies WIS×1.5 temp HP.', manaCost: 6 },
         },
-        effect: (caster, target, level) => {
-            console.log(`[martyrs_resolve] ${caster.name} uses Martyr's Resolve (level ${level})`);
+        effect: (caster, target, level, log) => {
+            const strStat = caster.getStat('dmg');  // STR = DMG per CLAUDE.md
+            const wisStat = caster.getStat('int');  // WIS = INT per CLAUDE.md
+
+            // Combined damage: STR×3.0 + WIS×1.5, reduced by target's armor
+            const rawVal       = strStat * 3.0 + wisStat * 1.5;
+            const defMult      = 1.0 + (target.armorDebuff || 0);
+            const effectiveDef = Math.max(0, target.getStat('def') * defMult);
+            const finalDmg     = Math.max(1, Math.floor(rawVal - effectiveDef));
+
+            applyDamage(caster, target, finalDmg, rawVal, log);
+            log(caster.name + " unleashes Martyr's Resolve on " + target.name + ' for ' + finalDmg + ' damage!');
+            caster.aggro += Math.floor(finalDmg * 0.5);
+
+            // Taunt + Retribution on caster — reflects 50% with armor pierce; martyrs flag enables surge
+            applyStatusEffect(caster, 'taunt', log, { turnsLeft: 3 });
+            applyStatusEffect(caster, 'retribution', log, {
+                reflectFraction: 0.50,
+                turnsLeft:       3,
+                armorPierce:     true,
+                martyrs:         true,
+            });
+            // 25% HP reflect flip handled in damageCalc.js
+
+            // Shield every living party member
+            const shieldAmount = Math.round(wisStat * 1.5);
+            for (const member of state.party.filter(m => m.isAlive())) {
+                applyStatusEffect(member, 'temp_shield', log, { amount: shieldAmount });
+            }
         },
     },
 
@@ -464,6 +551,7 @@ const SKILL_DATA = {
 
     call_familiar: {
         key: 'call_familiar',
+        isBaseSkill: true,
         class: 'summoner',
         rarity: 'common',
         maxLevel: 5,
@@ -476,11 +564,14 @@ const SKILL_DATA = {
             1: { name: 'Call Familiar',     description: 'Summon a Dog familiar. Attacks highest aggro enemy.',        manaCost: 3, familiarKey: 'dog'   },
             2: { name: 'Bond Creature',     description: 'Summon a Snake familiar. Attacks and poisons enemies.',      manaCost: 3, familiarKey: 'snake' },
             3: { name: 'Strengthen Bond',   description: 'Summon a Crow familiar. Attacks and blinds enemies.',        manaCost: 3, familiarKey: 'crow'  },
-            4: { name: 'Pact Bond',         description: 'Summon Bats familiar. Attacks and drains enemy HP.',         manaCost: 3, familiarKey: 'bats'  },
-            5: { name: 'Eternal Familiar',  description: 'Summon a Golem familiar. Heavy attacks, high HP.',           manaCost: 3, familiarKey: 'golem' },
+            4: { name: 'Pact Bond',         description: 'Summon a Bat swarm. Reduces all enemy DEF by 20%.',          manaCost: 3, familiarKey: 'bat'   },
+            5: { name: 'Eternal Familiar',  description: 'Summon a Golem familiar. Heavy attacks, high HP, draws aggro.', manaCost: 3, familiarKey: 'golem' },
         },
-        effect: (caster, target, level) => {
-            console.log(`[call_familiar] ${caster.name} uses Call Familiar (level ${level})`);
+        // Summon the familiar tied to the current skill level.
+        // If blood_pact was used first its bonus will be applied automatically inside summonFamiliarGroup.
+        effect(caster, _target, level, log) {
+            const familiarKey = SKILL_DATA.call_familiar.levels[level].familiarKey;
+            summonFamiliarGroup(caster, familiarKey, state.combat, log, false);
         },
     },
 
@@ -495,12 +586,31 @@ const SKILL_DATA = {
         chargeUp: false,
         upgradeChain: ['soul_burst', 'soul_explosion', 'soul_detonation'],
         levels: {
-            1: { name: 'Soul Burst',       description: '1.5x INT magic damage to one enemy. Familiar gains +2 DMG until recalled.',   manaCost: 3 },
-            2: { name: 'Soul Explosion',   description: '2.0x INT magic damage to one enemy. Familiar gains +4 DMG until recalled.',   manaCost: 3 },
-            3: { name: 'Soul Detonation',  description: '2.5x INT magic damage to one enemy. Familiar gains +6 DMG until recalled.',   manaCost: 3 },
+            1: { name: 'Soul Burst',       description: 'Detonate active familiar: deal 1.5× INT magic damage to one enemy and trigger its On-Death effect.',  manaCost: 3 },
+            2: { name: 'Soul Explosion',   description: 'Detonate active familiar: deal 2.0× INT magic damage to one enemy and trigger its On-Death effect.',  manaCost: 4 },
+            3: { name: 'Soul Detonation',  description: 'Detonate active familiar: deal 2.5× INT magic damage to one enemy and trigger its On-Death effect.',  manaCost: 5 },
         },
-        effect: (caster, target, level) => {
-            console.log(`[soul_burst] ${caster.name} uses Soul Burst (level ${level})`);
+        // Detonates all active familiars: deals INT-scaled magic damage, fires each familiar's
+        // onDeath hook, then removes them from the field and combat queue.
+        effect(caster, target, level, log) {
+            const mults  = [null, 1.5, 2.0, 2.5];
+            const intStat = caster.getStat('int');
+            const dmgStat = Math.max(1, caster.getStat('dmg'));
+            const effectiveMult = (intStat / dmgStat) * mults[level];
+
+            const result = calculateDamage(caster, target, effectiveMult, false, 'magic');
+            applyDamage(caster, target, result.damage, result.rawDamage, log);
+            if (result.isCrit) log('Critical hit!');
+            caster.aggro += Math.floor(result.damage * 0.5);
+
+            // Fire each familiar's onDeath hook and clear them from the field
+            const familiars = (state.activeFamiliars || []).filter(f => f.isAlive());
+            for (const f of familiars) f.onDeath(log);
+            state.activeFamiliars = [];
+            state.activeFamiliar  = null;
+            if (state.combat && state.combat.queue) {
+                state.combat.queue = state.combat.queue.filter(slot => !slot.isFamiliar);
+            }
         },
     },
 
@@ -515,11 +625,41 @@ const SKILL_DATA = {
         chargeUp: false,
         upgradeChain: ['blood_pact', 'crimson_covenant'],
         levels: {
-            1: { name: 'Blood Pact',        description: 'Sacrifice 15% max HP. Familiar gains +50% DMG and +2 SPD for 3 turns.',    manaCost: 3 },
-            2: { name: 'Crimson Covenant',  description: 'Sacrifice 10% max HP. Familiar gains +80% DMG and +3 SPD for 3 turns.',    manaCost: 3 },
+            // Blood Pact cost is HP only — deducted inside effect(), not here
+            1: { name: 'Blood Pact',        description: 'Sacrifice 15% max HP. Recall familiar. Next summon gains +50% DMG.',  manaCost: 0 },
+            2: { name: 'Crimson Covenant',  description: 'Sacrifice 10% max HP. Recall familiar. Next summon gains +80% DMG.',  manaCost: 0 },
         },
-        effect: (caster, target, level) => {
-            console.log(`[blood_pact] ${caster.name} uses Blood Pact (level ${level})`);
+        // Pays HP, recalls any active familiar, then stores bloodPactBonus so the next
+        // call to summonFamiliarGroup picks it up and applies the DMG multiplier.
+        effect(caster, _target, level, log) {
+            const specs = [null,
+                { hpCost: 0.15, dmgMult: 1.5 },
+                { hpCost: 0.10, dmgMult: 1.8 },
+            ];
+            const spec    = specs[level];
+            const hpCost  = Math.floor(caster.getMaxHP() * spec.hpCost);
+            caster.currentHP = Math.max(1, caster.currentHP - hpCost);
+            log(caster.name + ' sacrifices ' + hpCost + ' HP to forge a Blood Pact!');
+
+            // Recall any living familiars
+            const activeFamiliars = state.activeFamiliars || [];
+            if (activeFamiliars.length > 0) {
+                const recalledKey      = activeFamiliars[0].familiarKey;
+                const recallTemplate   = FAMILIAR_TEMPLATES[recalledKey];
+                if (recallTemplate && recallTemplate.onRecall) {
+                    recallTemplate.onRecall(caster, log);
+                }
+                if (state.combat && state.combat.queue) {
+                    state.combat.queue = state.combat.queue.filter(slot => !slot.isFamiliar);
+                }
+                state.activeFamiliars = [];
+                state.activeFamiliar  = null;
+            }
+
+            // Store bonus — consumed by the next summonFamiliarGroup call
+            caster.bloodPactBonus = { hpMult: 1, dmgMult: spec.dmgMult };
+            log('Blood Pact sealed — next familiar summoned gains +'
+                + Math.round((spec.dmgMult - 1) * 100) + '% DMG!');
         },
     },
 
@@ -534,10 +674,12 @@ const SKILL_DATA = {
         chargeUp: true,
         upgradeChain: ['summon_herald'],
         levels: {
-            1: { name: 'Summon Herald',  description: 'Charge 1 turn. Next turn: replace current familiar with a Herald — a powerful spirit that deals 3x INT magic damage per turn.', manaCost: 3 },
+            1: { name: 'Summon Herald', description: 'Charge 1 turn. Summon the Herald — a powerful spirit that attacks all enemies each turn. Coexists with active familiars.', manaCost: 5 },
         },
-        effect: (caster, target, level) => {
-            console.log(`[summon_herald] ${caster.name} uses Summon Herald (level ${level})`);
+        // Fired on turn 2 by executeChargeUpTick. skipRecall = true so Herald coexists
+        // alongside any already-active familiar group.
+        effect(caster, _target, _level, log) {
+            summonFamiliarGroup(caster, 'herald', state.combat, log, true);
         },
     },
 
@@ -554,11 +696,11 @@ const SKILL_DATA = {
         chargeUp: false,
         upgradeChain: ['power_strike', 'heavy_blow', 'crushing_strike', 'overwhelming_force', 'titan_strike'],
         levels: {
-            1: { name: 'Power Strike',          description: '2.0x DMG.',                                                               manaCost: 3 },
-            2: { name: 'Heavy Blow',             description: '2.5x DMG. 15% stun chance.',                                             manaCost: 3 },
+            1: { name: 'Power Strike',          description: '2.0x DMG.',                                                               manaCost: 2 },
+            2: { name: 'Heavy Blow',             description: '2.5x DMG. 15% stun chance.',                                             manaCost: 2 },
             3: { name: 'Crushing Strike',        description: '3.0x DMG. 20% stun chance.',                                             manaCost: 3 },
             4: { name: 'Overwhelming Force',     description: '3.5x DMG. 25% stun chance + -10% DEF debuff.',                          manaCost: 3 },
-            5: { name: 'Titan Strike',           description: '4.0x DMG. 30% stun chance + -20% DEF debuff.',                          manaCost: 3 },
+            5: { name: 'Titan Strike',           description: '4.0x DMG. 30% stun chance + -20% DEF debuff.',                          manaCost: 4 },
         },
         effect: (caster, target, level, log) => {
             const MULTS   = [0, 2.0, 2.5, 3.0, 3.5, 4.0];
@@ -631,9 +773,9 @@ const SKILL_DATA = {
         loadoutVariant: 'dualwield',    // only available when warrior has dual weapons equipped
         upgradeChain: ['double_strike', 'flurry', 'whirlwind_slash'],
         levels: {
-            1: { name: 'Double Strike',      description: 'Two hits of 1.0x DMG each.',                                                    manaCost: 3 },
-            2: { name: 'Flurry',             description: 'Two hits of 1.3x DMG each. 15% bleed chance per hit.',                         manaCost: 3 },
-            3: { name: 'Whirlwind Slash',    description: 'Two hits of 1.6x DMG each. 20% bleed chance per hit.',                         manaCost: 3 },
+            1: { name: 'Double Strike',      description: 'Two hits of 1.0x DMG each.',                                                    manaCost: 4 },
+            2: { name: 'Flurry',             description: 'Two hits of 1.3x DMG each. 15% bleed chance per hit.',                         manaCost: 4 },
+            3: { name: 'Whirlwind Slash',    description: 'Two hits of 1.6x DMG each. 20% bleed chance per hit.',                         manaCost: 4 },
         },
         effect: (caster, target, level, log) => {
             const MULTS    = [0, 1.0, 1.3, 1.6];
@@ -690,7 +832,7 @@ const SKILL_DATA = {
         chargeUp: false,
         upgradeChain: ['last_stand'],
         levels: {
-            1: { name: 'Last Stand',  description: 'Until next turn: immune to death (survive at 1 HP once). Gain +50% DMG.',    manaCost: 3 },
+            1: { name: 'Last Stand',  description: 'Until next turn: immune to death (survive at 1 HP once). Gain +50% DMG.',    manaCost: 5 },
         },
         effect: (caster, _target, _level, log) => {
             applyStatusEffect(caster, 'last_stand_buff', log);
@@ -710,11 +852,11 @@ const SKILL_DATA = {
         chargeUp: false,
         upgradeChain: ['cleave', 'wild_cleave', 'berserker_cleave', 'savage_cleave', 'massacre'],
         levels: {
-            1: { name: 'Cleave',             description: '1.0x DMG to all enemies.',                                                              manaCost: 3, enragedBonus: false },
-            2: { name: 'Wild Cleave',         description: '1.3x DMG to all enemies.',                                                             manaCost: 3, enragedBonus: false },
+            1: { name: 'Cleave',             description: '1.0x DMG to all enemies.',                                                              manaCost: 2, enragedBonus: false },
+            2: { name: 'Wild Cleave',         description: '1.3x DMG to all enemies.',                                                             manaCost: 2, enragedBonus: false },
             3: { name: 'Berserker Cleave',    description: '1.6x DMG to all enemies. +0.4x bonus DMG if Enraged (HP < 50%).',                      manaCost: 3, enragedBonus: true  },
             4: { name: 'Savage Cleave',       description: '2.0x DMG to all enemies. +0.5x bonus DMG if Enraged.',                                 manaCost: 3, enragedBonus: true  },
-            5: { name: 'Massacre',            description: '2.4x DMG to all enemies. +0.6x bonus DMG if Enraged. 20% bleed each.',                 manaCost: 3, enragedBonus: true  },
+            5: { name: 'Massacre',            description: '2.4x DMG to all enemies. +0.6x bonus DMG if Enraged. 20% bleed each.',                 manaCost: 4, enragedBonus: true  },
         },
         effect: (caster, targets, level, log) => {
             // Multipliers and per-level tables
@@ -754,9 +896,9 @@ const SKILL_DATA = {
         chargeUp: false,
         upgradeChain: ['blood_price', 'blood_toll', 'life_tithe'],
         levels: {
-            1: { name: 'Blood Price',  description: 'Sacrifice 10% max HP to deal 2.0x DMG.',                                                         manaCost: 3, enragedBonus: false },
-            2: { name: 'Blood Toll',   description: 'Sacrifice 10% max HP to deal 2.5x DMG + 20% bleed chance.',                                      manaCost: 3, enragedBonus: false },
-            3: { name: 'Life Tithe',   description: 'Sacrifice 10% max HP to deal 3.0x DMG + 30% bleed. +0.5x bonus DMG if Enraged.',                 manaCost: 3, enragedBonus: true  },
+            1: { name: 'Blood Price',  description: 'Sacrifice 10% max HP to deal 2.0x DMG.',                                                         manaCost: 2, enragedBonus: false },
+            2: { name: 'Blood Toll',   description: 'Sacrifice 10% max HP to deal 2.5x DMG + 20% bleed chance.',                                      manaCost: 2, enragedBonus: false },
+            3: { name: 'Life Tithe',   description: 'Sacrifice 10% max HP to deal 3.0x DMG + 30% bleed. +0.5x bonus DMG if Enraged.',                 manaCost: 2, enragedBonus: true  },
         },
         effect: (caster, target, level, log) => {
             const HP_COST_FRACS = [0, 0.08, 0.12, 0.15];
@@ -803,8 +945,8 @@ const SKILL_DATA = {
         chargeUp: false,
         upgradeChain: ['frenzy', 'war_frenzy'],
         levels: {
-            1: { name: 'Frenzy',      description: '+30% DMG and +2 SPD for 3 turns. Bonus +20% DMG if Enraged.',     manaCost: 3, enragedBonus: true },
-            2: { name: 'War Frenzy',  description: '+50% DMG and +4 SPD for 3 turns. Bonus +30% DMG if Enraged.',     manaCost: 3, enragedBonus: true },
+            1: { name: 'Frenzy',      description: '+30% DMG and +2 SPD for 3 turns. Bonus +20% DMG if Enraged.',     manaCost: 4, enragedBonus: true },
+            2: { name: 'War Frenzy',  description: '+50% DMG and +4 SPD for 3 turns. Bonus +30% DMG if Enraged.',     manaCost: 4, enragedBonus: true },
         },
         effect: (caster, target, level, log) => {
             const HITS       = [0, 3, 4];
@@ -843,7 +985,7 @@ const SKILL_DATA = {
         chargeUp: false,
         upgradeChain: ['ragnarok'],
         levels: {
-            1: { name: 'Ragnarok',  description: '3.0x DMG to all enemies. +1.0x bonus DMG if Enraged. 30% bleed each.',  manaCost: 3, enragedBonus: true },
+            1: { name: 'Ragnarok',  description: '3.0x DMG to all enemies. +1.0x bonus DMG if Enraged. 30% bleed each.',  manaCost: 6, enragedBonus: true },
         },
         effect: (caster, targets, level, log) => {
             // Check third-hit threshold BEFORE the HP cost is deducted
@@ -889,83 +1031,245 @@ const SKILL_DATA = {
     // ── WIZARD ────────────────────────────────────────────────────────────────
 
     arcane_bolt: {
-        key: 'arcane_bolt',
-        class: 'wizard',
-        rarity: 'common',
-        maxLevel: 5,
+        key:          'arcane_bolt',
+        class:        'wizard',
+        rarity:       'common',
+        maxLevel:     5,
+        isBaseSkill:  true,
         currentLevel: 1,
-        scalingStat: 'int',
-        attackType: 'magic',
-        chargeUp: false,
-        overcharge: true,   // overcharge bonus damage logic implemented later
-        upgradeChain: ['arcane_bolt', 'arcane_lance', 'arcane_spike', 'arcane_beam', 'arcane_annihilation'],
+        scalingStat:  'int',
+        attackType:   'magic',
+        chargeUp:     false,
+        upgradeChain: ['arcane_bolt', 'arcane_lance', 'arcane_spear', 'arcane_javelin', 'arcane_annihilator'],
         levels: {
-            1: { name: 'Arcane Bolt',          description: '1.5x INT magic damage to one enemy.',                                              manaCost: 3 },
-            2: { name: 'Arcane Lance',          description: '2.0x INT magic damage to one enemy.',                                             manaCost: 3 },
-            3: { name: 'Arcane Spike',          description: '2.5x INT magic damage to one enemy. 15% Arcane Burn chance.',                     manaCost: 3 },
-            4: { name: 'Arcane Beam',           description: '3.0x INT magic damage to one enemy. 20% Arcane Burn chance.',                     manaCost: 3 },
-            5: { name: 'Arcane Annihilation',   description: '3.5x INT magic damage to one enemy. 30% Arcane Burn chance.',                     manaCost: 3 },
+            1: { name: 'Arcane Bolt',       description: '1.6x INT magic damage. Overcharge: +0.3x INT per extra mana.',                                          manaCost: 2, overchargeBonus: 0.3 },
+            2: { name: 'Arcane Lance',      description: '1.9x INT magic damage. Overcharge: +0.4x INT per extra mana.',                                          manaCost: 2, overchargeBonus: 0.4 },
+            3: { name: 'Arcane Spear',      description: '2.3x INT magic damage + Arcane Burn (4/turn, 2t). Overcharge: +0.5x INT per mana.',                     manaCost: 3, overchargeBonus: 0.5 },
+            4: { name: 'Arcane Javelin',    description: '2.7x INT magic damage + Arcane Burn (6/turn, 2t). Overcharge: +0.6x INT per mana.',                     manaCost: 3, overchargeBonus: 0.6 },
+            5: { name: 'Arcane Annihilator',description: '3.2x INT, ignores armor + Arcane Burn (8/turn, 3t). Overcharge: +0.8x INT per mana.',                   manaCost: 4, overchargeBonus: 0.8 },
         },
-        effect: (caster, target, level) => {
-            console.log(`[arcane_bolt] ${caster.name} uses Arcane Bolt (level ${level})`);
+        effect: (caster, target, level, log) => {
+            const BASE_MULTS = [0, 1.6, 1.9, 2.3, 2.7, 3.2];
+            const OB_MULTS   = [0, 0.3, 0.4, 0.5, 0.6, 0.8];
+
+            const intStat = caster.getStat('int');
+            const extra   = caster.pendingOvercharge ?? 0;
+            caster.pendingOvercharge = 0;
+
+            // ── Cap overcharge so currentHP never drops below 10% of max ──────────
+            const hpFloor      = Math.ceil(caster.getMaxHP() * 0.10);
+            const hpBurnBudget = Math.max(0, caster.currentHP - hpFloor);
+            const hpPerMana    = caster.getMaxHP() * 0.01;
+            const maxBurnMana  = Math.floor(hpBurnBudget / hpPerMana);
+            // Base cost already deducted by useSkill; remaining mana is available for overcharge
+            const manaAvail    = Math.max(0, caster.currentMana);
+            const cappedExtra  = Math.min(extra, manaAvail + maxBurnMana);
+
+            // ── Deduct overcharge mana (excess burns HP) ───────────────────────────
+            caster.currentMana -= cappedExtra;
+            if (caster.currentMana < 0) {
+                const deficit = -caster.currentMana;
+                const hpCost  = Math.floor(deficit * hpPerMana);
+                caster.currentHP   = Math.max(hpFloor, caster.currentHP - hpCost);
+                caster.currentMana = 0;
+                log(caster.name + ' burns life force for arcane power!');
+            }
+
+            // ── Compute and deal INT-scaled magic damage ───────────────────────────
+            const totalMult     = BASE_MULTS[level] + OB_MULTS[level] * cappedExtra;
+            const dmgStat       = Math.max(1, caster.getStat('dmg'));
+            const effectiveMult = (intStat / dmgStat) * totalMult;   // converts INT scale → DMG-stat system
+            const armorPierce   = level >= 5;
+            const result        = calculateDamage(caster, target, effectiveMult, false, 'magic', { ignoreArmor: armorPierce });
+            const finalDmg      = Math.max(1, result.damage);
+
+            target.takeDamage(finalDmg, log);
+            const msg = result.isCrit
+                ? 'CRITICAL! ' + caster.name + ' blasts ' + target.name + ' for ' + finalDmg + ' arcane damage!'
+                : caster.name + ' blasts ' + target.name + ' for ' + finalDmg + ' arcane damage!';
+            log(msg);
+            caster.aggro += Math.floor(finalDmg * 0.5);
+
+            // ── Arcane Burn on level 3+ ────────────────────────────────────────────
+            if (level >= 3) {
+                const burnDpt = [0, 0, 0, 4, 6, 8][level];
+                const burnDur = [0, 0, 0, 2, 2, 3][level];
+                applyStatusEffect(target, 'arcane_burn', log, { damagePerTurn: burnDpt, duration: burnDur });
+            }
         },
     },
 
     arcane_storm: {
-        key: 'arcane_storm',
-        class: 'wizard',
-        rarity: 'uncommon',
-        maxLevel: 3,
+        key:          'arcane_storm',
+        class:        'wizard',
+        rarity:       'uncommon',
+        maxLevel:     3,
         currentLevel: 1,
-        scalingStat: 'int',
-        attackType: 'aoe',
-        chargeUp: false,
-        overcharge: true,   // overcharge bonus damage logic implemented later
-        upgradeChain: ['arcane_storm', 'arcane_tempest', 'arcane_cataclysm'],
+        scalingStat:  'int',
+        attackType:   'aoe',
+        chargeUp:     false,
+        upgradeChain: ['arcane_storm', 'arcane_tempest', 'arcane_apocalypse'],
         levels: {
-            1: { name: 'Arcane Storm',      description: '1.2x INT magic damage to all enemies.',                                               manaCost: 3 },
-            2: { name: 'Arcane Tempest',    description: '1.6x INT magic damage to all enemies. 20% Arcane Burn chance each.',                  manaCost: 3 },
-            3: { name: 'Arcane Cataclysm',  description: '2.0x INT magic damage to all enemies. 30% Arcane Burn chance each.',                  manaCost: 3 },
+            1: { name: 'Arcane Storm',      description: '1.0x INT magic damage to all enemies. Overcharge: +0.2x INT per mana per target.',                    manaCost: 4, overchargeBonus: 0.2 },
+            2: { name: 'Arcane Tempest',    description: '1.3x INT to all. 25% Blind per target. Overcharge: +0.3x INT per mana per target.',                   manaCost: 4, overchargeBonus: 0.3 },
+            3: { name: 'Arcane Apocalypse', description: '1.6x INT to all. 35% Blind. Arcane Burn (6/turn, 2t) each. Overcharge: +0.4x INT per mana.',         manaCost: 5, overchargeBonus: 0.4 },
         },
-        effect: (caster, target, level) => {
-            console.log(`[arcane_storm] ${caster.name} uses Arcane Storm (level ${level})`);
+        effect: (caster, targets, level, log) => {
+            const BASE_MULTS = [0, 1.0, 1.3, 1.6];
+            const OB_MULTS   = [0, 0.2, 0.3, 0.4];
+            const BLIND_CH   = [0, 0,   0.25, 0.35];
+
+            const intStat = caster.getStat('int');
+            const extra   = caster.pendingOvercharge ?? 0;
+            caster.pendingOvercharge = 0;
+
+            // ── Same HP-burn overcharge cap logic as arcane_bolt ──────────────────
+            const hpFloor      = Math.ceil(caster.getMaxHP() * 0.10);
+            const hpBurnBudget = Math.max(0, caster.currentHP - hpFloor);
+            const hpPerMana    = caster.getMaxHP() * 0.01;
+            const maxBurnMana  = Math.floor(hpBurnBudget / hpPerMana);
+            const manaAvail    = Math.max(0, caster.currentMana);
+            const cappedExtra  = Math.min(extra, manaAvail + maxBurnMana);
+
+            caster.currentMana -= cappedExtra;
+            if (caster.currentMana < 0) {
+                const deficit = -caster.currentMana;
+                const hpCost  = Math.floor(deficit * hpPerMana);
+                caster.currentHP   = Math.max(hpFloor, caster.currentHP - hpCost);
+                caster.currentMana = 0;
+                log(caster.name + ' burns life force for arcane power!');
+            }
+
+            // ── Strike all living enemies — overcharge bonus applies per target ────
+            const totalMult     = BASE_MULTS[level] + OB_MULTS[level] * cappedExtra;
+            const dmgStat       = Math.max(1, caster.getStat('dmg'));
+            const effectiveMult = (intStat / dmgStat) * totalMult;
+            const living        = targets.filter(e => e.isAlive());
+
+            for (const t of living) {
+                const result   = calculateDamage(caster, t, effectiveMult, false, 'magic');
+                const finalDmg = Math.max(1, result.damage);
+                t.takeDamage(finalDmg, log);
+                const msg = result.isCrit
+                    ? 'CRITICAL! ' + caster.name + ' strikes ' + t.name + ' for ' + finalDmg + ' arcane damage!'
+                    : caster.name + ' strikes ' + t.name + ' for ' + finalDmg + ' arcane damage!';
+                log(msg);
+                caster.aggro += Math.floor(finalDmg * 0.5);
+
+                // Level 2+: 25% / 35% blind chance per target
+                if (level >= 2 && Math.random() < BLIND_CH[level]) {
+                    applyStatusEffect(t, 'blind', log);
+                }
+
+                // Level 3: Arcane Burn on every target
+                if (level >= 3) {
+                    applyStatusEffect(t, 'arcane_burn', log, { damagePerTurn: 6, duration: 2 });
+                }
+            }
         },
     },
 
     siphon: {
-        key: 'siphon',
-        class: 'wizard',
-        rarity: 'rare',
-        maxLevel: 2,
+        key:          'siphon',
+        class:        'wizard',
+        rarity:       'rare',
+        maxLevel:     2,
         currentLevel: 1,
-        scalingStat: 'int',
-        attackType: 'magic',
-        chargeUp: false,
-        upgradeChain: ['siphon', 'soul_siphon'],
+        scalingStat:  'int',
+        attackType:   'magic',
+        chargeUp:     false,
+        upgradeChain: ['siphon', 'arcane_drain'],
         levels: {
-            1: { name: 'Siphon',       description: '1.5x INT magic damage. Restore mana equal to 50% of damage dealt.',       manaCost: 3 },
-            2: { name: 'Soul Siphon',  description: '2.0x INT magic damage. Restore mana equal to 75% of damage dealt.',       manaCost: 3 },
+            1: { name: 'Siphon',       description: '1.2x INT magic damage. If target is a caster: restore 4 mana instead.',                      manaCost: 3 },
+            2: { name: 'Arcane Drain', description: '1.8x INT magic damage. If target is a caster: restore 6 mana + Stun for 1 turn.',            manaCost: 3 },
         },
-        effect: (caster, target, level) => {
-            console.log(`[siphon] ${caster.name} uses Siphon (level ${level})`);
+        effect: (caster, target, level, log) => {
+            const MULTS      = [0, 1.2, 1.8];
+            const MANA_REGEN = [0, 4,   6  ];
+
+            const intStat = caster.getStat('int');
+
+            if (target.isCaster) {
+                // Target is a caster — drain arcane energy instead of dealing damage
+                const manaGain = MANA_REGEN[level];
+                caster.currentMana = Math.min(caster.getMaxMana(), caster.currentMana + manaGain);
+                log(caster.name + ' siphons arcane energy from ' + target.name + ' — restoring ' + manaGain + ' mana!');
+                caster.aggro += 10;
+
+                // Level 2: also shatter the caster's concentration with a stun
+                if (level >= 2) {
+                    applyStatusEffect(target, 'stun', log, { turnsLeft: 1 });
+                    log(target.name + "'s concentration shattered!");
+                }
+            } else {
+                // Non-caster target — deal INT-scaled magic damage
+                const dmgStat       = Math.max(1, caster.getStat('dmg'));
+                const effectiveMult = (intStat / dmgStat) * MULTS[level];
+                const result        = calculateDamage(caster, target, effectiveMult, false, 'magic');
+                const finalDmg      = Math.max(1, result.damage);
+                target.takeDamage(finalDmg, log);
+                const msg = result.isCrit
+                    ? 'CRITICAL! ' + caster.name + ' siphons ' + target.name + ' for ' + finalDmg + ' damage!'
+                    : caster.name + ' siphons ' + target.name + ' for ' + finalDmg + ' damage!';
+                log(msg);
+                caster.aggro += Math.floor(finalDmg * 0.5);
+            }
         },
     },
 
     singularity: {
-        key: 'singularity',
-        class: 'wizard',
-        rarity: 'legendary',
-        maxLevel: 1,
+        key:          'singularity',
+        class:        'wizard',
+        rarity:       'legendary',
+        maxLevel:     1,
         currentLevel: 1,
-        scalingStat: 'int',
-        attackType: 'aoe',
-        chargeUp: true,
+        scalingStat:  'int',
+        attackType:   'aoe',
+        chargeUp:     true,
+        chargeTurns:  2,
         upgradeChain: ['singularity'],
         levels: {
-            1: { name: 'Singularity',  description: 'Charge 1 turn. Next turn: deal 4.0x INT magic damage to all enemies. Applies Arcane Burn for 3 turns to each.', manaCost: 3 },
+            // Singularity cost is all remaining mana + 20% HP — deducted inside effect(), not here
+            1: { name: 'Singularity', description: 'Charge 2 turns. Costs all mana + 20% HP. Deals (4.0 + 1.0×mana)×INT to all, ignores armor. Arcane Burn 6/turn 3t. Full-mana cast: Stun all 2t.', manaCost: 0 },
         },
-        effect: (caster, target, level) => {
-            console.log(`[singularity] ${caster.name} uses Singularity (level ${level})`);
+        // Singularity charge-up handled in actions.js.
+        effect: (caster, targets, level, log) => {
+            const intStat   = caster.getStat('int');
+            const manaSpent = caster.currentMana;   // read all remaining mana at execution
+
+            // ── HP cost: 20% of max HP, floor at 1 HP ────────────────────────────
+            const hpCost = Math.floor(caster.getMaxHP() * 0.20);
+            caster.currentHP = Math.max(1, caster.currentHP - hpCost);
+            log(caster.name + ' tears open a singularity — sacrificing ' + hpCost + ' HP!');
+
+            // ── Drain all mana, note if caster was full ───────────────────────────
+            const wasFull      = manaSpent === caster.getMaxMana();
+            caster.currentMana = 0;
+
+            // ── Deal magic damage to all living enemies — ignores armor ───────────
+            const dmgStat       = Math.max(1, caster.getStat('dmg'));
+            const baseDmgMult   = 4.0 + 1.0 * manaSpent;
+            const effectiveMult = (intStat / dmgStat) * baseDmgMult;
+            const living        = targets.filter(e => e.isAlive());
+
+            for (const t of living) {
+                const result   = calculateDamage(caster, t, effectiveMult, false, 'magic', { ignoreArmor: true });
+                const finalDmg = Math.max(1, result.damage);
+                t.takeDamage(finalDmg, log);
+                const msg = result.isCrit
+                    ? 'CRITICAL! Singularity crushes ' + t.name + ' for ' + finalDmg + ' arcane damage!'
+                    : 'Singularity crushes ' + t.name + ' for ' + finalDmg + ' arcane damage!';
+                log(msg);
+                caster.aggro += Math.floor(finalDmg * 0.5);
+
+                // Arcane Burn on all targets
+                applyStatusEffect(t, 'arcane_burn', log, { damagePerTurn: 6, duration: 3 });
+
+                // Full-mana bonus: stun all targets for 2 turns
+                if (wasFull) {
+                    applyStatusEffect(t, 'stun', log, { turnsLeft: 2 });
+                }
+            }
         },
     },
 

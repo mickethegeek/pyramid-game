@@ -67,6 +67,13 @@ let pendingMultiArrow = false;
 // True when Radiant Word has fired its enemy hit and is awaiting an ally heal-target click
 let pendingRadiantWord = false;
 
+// Skill key for which the overcharge slider is currently open (arcane_bolt / arcane_storm only)
+let pendingOverchargeSkill = null;
+// Current extra-mana value shown on the slider
+let overchargeSliderValue  = 0;
+// Maximum overcharge computed when the slider was opened; recomputed each draw frame
+let overchargeSliderMax    = 0;
+
 // Reset overlay state at the start of each new combat encounter
 function resetCombatUIState() {
     combatItemOverlay    = false;
@@ -79,16 +86,20 @@ function resetCombatUIState() {
     combatMoveVisible    = false;
     combatSwapMode       = false;
     combatLastActor      = null;
-    pendingRadiantWord   = false;
-    // Clear any lingering multi-arrow or radiant word state on party members
+    pendingRadiantWord     = false;
+    pendingOverchargeSkill = null;
+    overchargeSliderValue  = 0;
+    overchargeSliderMax    = 0;
+    // Clear any lingering multi-arrow, radiant word, or overcharge state on party members
     if (state.party) {
         for (const m of state.party) {
-            m.volleyArrowsLeft      = 0;
-            m.eclipseArrowsLeft     = 0;
-            m.eclipseTargets        = [];
+            m.volleyArrowsLeft       = 0;
+            m.eclipseArrowsLeft      = 0;
+            m.eclipseTargets         = [];
             m.radiantWordHealPending = false;
             m.radiantWordTarget      = null;
             m.radiantWordLevel       = null;
+            m.pendingOvercharge      = 0;
         }
     }
 }
@@ -258,10 +269,15 @@ function getPartyCY(member, party) {
 }
 
 // Draw one avatar slot per party member — back row on the left, front row on the right, stacked vertically.
+// Familiars are drawn alongside the party using the same column helpers; the combined list is passed to
+// getPartyCY so vertical spacing accounts for all occupants of each row column.
 function drawPartyAvatars(combat) {
-    const L     = COMBAT_LAYOUT;
-    const party = combat.party;
-    const actor = getCurrentActor(combat);
+    const L          = COMBAT_LAYOUT;
+    const party      = combat.party;
+    const actor      = getCurrentActor(combat);
+    const familiars  = state.activeFamiliars || [];
+    // Combined list: party + familiars share the same columns for spacing purposes
+    const allCombatants = [...party, ...familiars];
 
     // Auto-reset move/swap UI when the acting combatant changes
     if (actor !== combatLastActor) {
@@ -272,9 +288,18 @@ function drawPartyAvatars(combat) {
 
     for (const member of party) {
         const cx       = getPartyCX(member, L);
-        const cy       = getPartyCY(member, party);
+        const cy       = getPartyCY(member, allCombatants);
         const isActive = (member === actor && combat.phase === 'player_turn');
         drawPartySlot(member, cx, cy, isActive);
+    }
+
+    // Draw familiars — slot into the same party columns, stacked with party members
+    for (const unit of familiars) {
+        initFamiliarDisplay(unit, familiars);
+        const cx       = getPartyCX(unit, L);
+        const cy       = getPartyCY(unit, allCombatants);
+        const isActive = (unit === actor);
+        drawFamiliarSlot(unit, cx, cy, isActive);
     }
 
     if (combat.phase === 'player_turn') {
@@ -284,7 +309,7 @@ function drawPartyAvatars(combat) {
             for (const member of party) {
                 if (member.isAlive() && member.row === dest) {
                     const cx = getPartyCX(member, L);
-                    const cy = getPartyCY(member, party);
+                    const cy = getPartyCY(member, allCombatants);
                     ctx.save();
                     ctx.strokeStyle = '#06b6d4';
                     ctx.lineWidth   = 2;
@@ -300,7 +325,7 @@ function drawPartyAvatars(combat) {
             for (const member of party) {
                 if (!member.isAlive()) continue;
                 const cx = getPartyCX(member, L);
-                const cy = getPartyCY(member, party);
+                const cy = getPartyCY(member, allCombatants);
                 ctx.save();
                 ctx.strokeStyle = '#86efac';
                 ctx.lineWidth   = 2;
@@ -312,7 +337,7 @@ function drawPartyAvatars(combat) {
         // MOVE button only when player has clicked the active character
         if (combatMoveVisible) {
             const cx = getPartyCX(actor, L);
-            const cy = getPartyCY(actor, party);
+            const cy = getPartyCY(actor, allCombatants);
             drawRowMoveButton(actor, cx, cy);
         } else {
             combatMoveBtn = null;
@@ -346,6 +371,123 @@ function drawPartySlot(member, cx, groundY, isActive) {
     }
 
     drawAvatarLabels(member, cx, groundY, true);
+}
+
+// ─── Familiar avatar helpers ───────────────────────────────────────────────────
+
+// One-time initialisation for a familiar unit's display state.
+// Assigns the correct row (snake → back; bat → random; others → front) and
+// a numbered display name for multi-unit types (Crow I/II, Bat I–VI).
+// Guarded by _displayInit so the random bat row stays stable across frames.
+function initFamiliarDisplay(unit, allFamiliars) {
+    if (unit._displayInit) return;
+
+    const key  = unit.familiarKey;
+    const nums = ['I', 'II', 'III', 'IV', 'V', 'VI'];
+
+    // Row placement
+    if (key === 'snake') {
+        unit.row = 'back';
+    } else if (key === 'bat') {
+        unit.row = Math.random() < 0.5 ? 'front' : 'back';
+    } else {
+        unit.row = 'front';   // dog, crow, golem, herald
+    }
+
+    // Numbered names for multi-unit types; named types use template.name unchanged
+    if (key === 'crow' || key === 'bat') {
+        const siblings = allFamiliars.filter(f => f.familiarKey === key);
+        const idx      = siblings.indexOf(unit);
+        unit.name      = (key === 'crow' ? 'Crow ' : 'Bat ') + (nums[idx] || String(idx + 1));
+    } else if (key === 'herald') {
+        unit.name = 'The Herald';
+    }
+    // dog → 'Dog', snake → 'Snake', golem → 'Golem' are already correct from template.name
+
+    unit._displayInit = true;
+}
+
+// Draw one familiar unit in the party column.
+// Figure is drawn via ctx.translate + ctx.scale so it shares coordinate helpers with party members.
+// Labels are drawn after ctx.restore() so they remain at full canvas scale.
+function drawFamiliarSlot(unit, cx, groundY, isActive) {
+    const avatarH = 60;   // safe default height used for dead overlay and glow anchor
+
+    if (isActive) drawActiveGlow(cx, groundY, '#f97316');
+
+    if (unit.currentHP <= 0) {
+        drawDeadOverlay(cx, groundY, avatarH);
+        drawAvatarLabels(unit, cx, groundY, false);
+        return;
+    }
+
+    const key = unit.familiarKey;
+
+    ctx.save();
+    ctx.translate(cx, groundY);   // pivot: feet of the figure at canvas (cx, groundY)
+
+    switch (key) {
+
+        case 'dog':
+            ctx.scale(0.75, 0.75);
+            drawFighterFigure(0, 0, '#b45309');
+            break;
+
+        case 'snake':
+            ctx.scale(0.75, 0.75);
+            drawCasterFigure(0, 0, '#16a34a');
+            // Wavy tail: 3 small arcs beneath the robe hem at ground level
+            ctx.strokeStyle = '#16a34a';
+            ctx.lineWidth   = 1.5;
+            ctx.beginPath(); ctx.arc(-7, 5, 4, Math.PI, 0, false); ctx.stroke();
+            ctx.beginPath(); ctx.arc( 0, 5, 4, Math.PI, 0, true);  ctx.stroke();
+            ctx.beginPath(); ctx.arc( 7, 5, 4, Math.PI, 0, false); ctx.stroke();
+            break;
+
+        case 'crow':
+            ctx.scale(0.75, 0.75);
+            drawArcherFigure(0, 0, '#6d28d9');
+            // Two wing triangles above the head (archer head centre at y = -76 in local space)
+            ctx.fillStyle = '#6d28d9';
+            ctx.beginPath(); ctx.moveTo(-3,-84); ctx.lineTo(-15,-98); ctx.lineTo(0,-89); ctx.closePath(); ctx.fill();
+            ctx.beginPath(); ctx.moveTo( 3,-84); ctx.lineTo( 15,-98); ctx.lineTo(0,-89); ctx.closePath(); ctx.fill();
+            break;
+
+        case 'bat':
+            ctx.scale(0.55, 0.55);   // smaller than other familiars
+            drawArcherFigure(0, 0, '#4b5563');
+            ctx.fillStyle = '#4b5563';
+            ctx.beginPath(); ctx.moveTo(-3,-84); ctx.lineTo(-15,-98); ctx.lineTo(0,-89); ctx.closePath(); ctx.fill();
+            ctx.beginPath(); ctx.moveTo( 3,-84); ctx.lineTo( 15,-98); ctx.lineTo(0,-89); ctx.closePath(); ctx.fill();
+            break;
+
+        case 'golem':
+            ctx.scale(0.9, 0.9);   // larger than standard familiars
+            drawFighterFigure(0, 0, '#78716c');
+            break;
+
+        case 'herald':
+            // Full size — no scale; gold glow ring at feet
+            drawCasterFigure(0, 0, '#f59e0b');
+            ctx.save();
+            ctx.shadowBlur  = 16;
+            ctx.shadowColor = '#f59e0b';
+            ctx.strokeStyle = '#f59e0b';
+            ctx.lineWidth   = 2;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 22, 6, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+            break;
+
+        default:
+            ctx.scale(0.75, 0.75);
+            drawFighterFigure(0, 0, '#888888');
+    }
+
+    ctx.restore();
+
+    drawAvatarLabels(unit, cx, groundY, false);
 }
 
 // Draw the row-switch button just above the active party member's avatar head.
@@ -1026,7 +1168,8 @@ function drawAvatarLabels(combatant, cx, groundY, isParty) {
         ctx.fillStyle = '#000033';
         ctx.fillRect(manaBarX, manaBarY, manaBarW, manaBarH);
 
-        ctx.fillStyle = '#3b82f6';
+        const staminaClasses = ['warrior', 'barbarian', 'paladin'];
+        ctx.fillStyle = staminaClasses.includes(combatant.class) ? '#eab308' : '#3b82f6';
         ctx.fillRect(manaBarX, manaBarY, Math.floor(manaBarW * pct), manaBarH);
 
         ctx.strokeStyle = '#1d4ed8';
@@ -1064,8 +1207,10 @@ function getEnemyAvatarStyle(name) {
     if (n.includes('goblin'))   return 'goblin';
     if (n.includes('skeleton')) return 'skeleton';
     if (n.includes('mage'))     return 'mage';
-    if (n.includes('pharaoh') || n.includes('colossus') || n.includes('apex')) return 'boss';
-    return 'brute';   // desert warrior, sphinx guard
+    if (n.includes('witch') || n.includes('shaman')) return 'mage';
+    if (n.includes('pharaoh') || n.includes('colossus') || n.includes('apex') || n.includes('goremaw')) return 'boss';
+    if (n.includes('rat') || n.includes('crawler')) return 'goblin';
+    return 'brute';   // desert warrior, sphinx guard, golems, horrors, stranglers
 }
 
 // Return the primary fill colour for an enemy
@@ -1080,6 +1225,15 @@ function getEnemyAvatarColor(name) {
     if (n.includes('desert'))   return '#78350f';
     if (n.includes('sand'))     return '#92400e';   // Sand Mage (after Sand Pharaoh)
     if (n.includes('sphinx'))   return '#4b5563';
+    // ── Act 1 swamp enemies ──
+    if (n.includes('goremaw'))          return '#1a4a1a';   // deep swamp serpent
+    if (n.includes('bog rat'))          return '#5a7a3a';   // murky green-brown
+    if (n.includes('swamp crawler'))    return '#2d5a27';   // dark swamp green
+    if (n.includes('vine strangler'))   return '#2d6a1f';   // vine green
+    if (n.includes('bog witch'))        return '#5a3a6e';   // swamp purple
+    if (n.includes('mud golem'))        return '#6b5a3e';   // muddy brown
+    if (n.includes('bog shaman'))       return '#3a5c3f';   // swamp green mage
+    if (n.includes('strangling horror')) return '#1a3a1a';  // dark horror
     return '#555555';
 }
 
@@ -1227,6 +1381,12 @@ function drawPlayerButtons(combat) {
         return;
     }
 
+    // ── Overcharge slider (arcane_bolt / arcane_storm) ────────────────────────
+    if (pendingOverchargeSkill) {
+        drawOverchargeSlider(actor);
+        return;
+    }
+
     // ── Potion targeting mode — show instruction banner instead of buttons ────
     if (combatItemSelected) {
         const potionName = POTION_DATA[combatItemSelected] ? POTION_DATA[combatItemSelected].name : 'Potion';
@@ -1276,6 +1436,71 @@ function drawPlayerButtons(combat) {
     if (hoverBtn(L.btn3X) && actor.classKey === 'warrior') drawStanceTooltip(actor, L.btn3X, L.btnW);
     if (hoverBtn(L.btn4X) && actor.baseSkill) drawSkillTooltip(actor.baseSkill, actor, L.btn4X, L.btnW);
     if (hoverBtn(L.btn5X) && slot2Key)        drawSkillTooltip(slot2Key,        actor, L.btn5X, L.btnW);
+}
+
+// Draw the inline overcharge slider that appears when the player selects arcane_bolt / arcane_storm.
+// Player clicks the track to choose extra mana, then hits CAST to fire — or clicks any other
+// action button to cancel (handled in handleCombatClick; this function is draw-only).
+function drawOverchargeSlider(actor) {
+    const L = COMBAT_LAYOUT;
+
+    // Recompute max each frame so the display stays accurate if HP or mana change mid-hover
+    const hpBuffer = Math.floor(
+        (actor.currentHP - actor.getMaxHP() * 0.10) / (actor.getMaxHP() * 0.01)
+    );
+    overchargeSliderMax   = Math.max(0, actor.currentMana + Math.max(0, hpBuffer));
+    overchargeSliderValue = Math.min(overchargeSliderValue, overchargeSliderMax);
+
+    // ── Geometry (shared with the click handler in handleCombatClick) ──────────
+    const trackX = 180;
+    const trackY = L.btnY + 28;   // 548 with default btnY=520
+    const trackW = 620;
+    const trackH = 10;
+    const castX  = 855;
+    const castW  = 145;
+
+    // ── Skill name + live value label ──────────────────────────────────────────
+    const skillDef  = SKILL_DATA && SKILL_DATA[pendingOverchargeSkill];
+    const level     = skillDef ? (actor.skillLevels[pendingOverchargeSkill] || 1) : 1;
+    const skillName = skillDef ? skillDef.levels[level].name : pendingOverchargeSkill;
+    ctx.fillStyle = '#a78bfa';
+    ctx.font      = 'bold 13px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(skillName + ' — Overcharge: +' + overchargeSliderValue + ' mana', 600, L.btnY + 16);
+
+    // ── Track background ───────────────────────────────────────────────────────
+    ctx.fillStyle = '#1e1e2e';
+    ctx.fillRect(trackX, trackY, trackW, trackH);
+
+    // Filled portion
+    const fillW = overchargeSliderMax > 0
+        ? Math.round((overchargeSliderValue / overchargeSliderMax) * trackW)
+        : 0;
+    ctx.fillStyle = '#7c3aed';
+    ctx.fillRect(trackX, trackY, fillW, trackH);
+
+    // Track border
+    ctx.strokeStyle = '#6d28d9';
+    ctx.lineWidth   = 1;
+    ctx.strokeRect(trackX, trackY, trackW, trackH);
+
+    // Handle knob at the current value position
+    const handleX = trackX + fillW;
+    ctx.fillStyle = '#c4b5fd';
+    ctx.beginPath();
+    ctx.arc(handleX, trackY + trackH / 2, 7, 0, Math.PI * 2);
+    ctx.fill();
+
+    // ── Range labels under the track ──────────────────────────────────────────
+    ctx.fillStyle = '#555';
+    ctx.font      = '11px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('0', trackX, trackY + trackH + 14);
+    ctx.textAlign = 'right';
+    ctx.fillText(overchargeSliderMax + ' max', trackX + trackW, trackY + trackH + 14);
+
+    // ── CAST button on the right ───────────────────────────────────────────────
+    drawActionButton(castX, L.btnY, castW, L.btnH, 'CAST', null, false);
 }
 
 // Return the computed damage value for abilities that deal a fixed amount, or null otherwise
@@ -1914,6 +2139,42 @@ function handleCombatClick(x, y, combat) {
         }
     }
 
+    // ── Overcharge slider: Cast button fires; track click adjusts value; anything else cancels ─
+    if (pendingOverchargeSkill) {
+        // Geometry must match drawOverchargeSlider exactly
+        const trackX = 180;
+        const trackY = L.btnY + 22;   // generous hit area (6px above the visual track)
+        const trackW = 620;
+        const trackH = 30;            // covers visual track + handle radius
+        const castX  = 855;
+        const castW  = 145;
+        const actor  = getCurrentActor(combat);
+
+        if (inButton(x, y, castX, L.btnY, castW, L.btnH)) {
+            // Confirm — store overcharge value and fire the skill
+            actor.pendingOvercharge = overchargeSliderValue;
+            const sk = pendingOverchargeSkill;
+            pendingOverchargeSkill = null;
+            overchargeSliderValue  = 0;
+            executePlayerSkill(combat, sk);
+            return combat.phase === 'victory' ? 'victory' : combat.phase === 'defeat' ? 'defeat' : null;
+        }
+
+        if (x >= trackX && x <= trackX + trackW && y >= trackY && y <= trackY + trackH) {
+            // Track click — map x position to slider value
+            const ratio = (x - trackX) / trackW;
+            overchargeSliderValue = Math.round(ratio * overchargeSliderMax);
+            overchargeSliderValue = Math.max(0, Math.min(overchargeSliderValue, overchargeSliderMax));
+            return null;
+        }
+
+        // Clicked elsewhere — cancel slider and fall through so the other action executes
+        actor.pendingOvercharge = 0;
+        pendingOverchargeSkill  = null;
+        overchargeSliderValue   = 0;
+        // (intentional fall-through to normal button handling below)
+    }
+
     // ── Waiting for the player to click a skill target ────────────────────────
     if (pendingSkill) {
         if (x >= L.enemyZoneX && y < L.btnY) {
@@ -2035,6 +2296,22 @@ function handleCombatClick(x, y, combat) {
             if (!skillKey) return null;
             const skillDef = SKILL_DATA && SKILL_DATA[skillKey];
             if (!skillDef) return null;
+            // Overcharge skills: compute max and open slider (or fire immediately if max is 0)
+            if (skillKey === 'arcane_bolt' || skillKey === 'arcane_storm') {
+                const hpBuf = Math.floor(
+                    (actor.currentHP - actor.getMaxHP() * 0.10) / (actor.getMaxHP() * 0.01)
+                );
+                const maxOC = Math.max(0, actor.currentMana + Math.max(0, hpBuf));
+                if (maxOC === 0) {
+                    actor.pendingOvercharge = 0;
+                    executePlayerSkill(combat, skillKey);
+                } else {
+                    pendingOverchargeSkill = skillKey;
+                    overchargeSliderValue  = 0;
+                    overchargeSliderMax    = maxOC;
+                }
+                return combat.phase === 'defeat' ? 'defeat' : null;
+            }
             // AoE, self-targeting, and charge-up (turn 1) execute immediately; others need a target click
             if (skillDef.attackType === 'aoe' || skillDef.attackType === 'self' || (skillDef.chargeUp && !actor.charging)) {
                 executePlayerSkill(combat, skillKey);
@@ -2049,6 +2326,22 @@ function handleCombatClick(x, y, combat) {
             if (!skillKey) return null;
             const skillDef = SKILL_DATA && SKILL_DATA[skillKey];
             if (!skillDef) return null;
+            // Overcharge skills: compute max and open slider (or fire immediately if max is 0)
+            if (skillKey === 'arcane_bolt' || skillKey === 'arcane_storm') {
+                const hpBuf = Math.floor(
+                    (actor.currentHP - actor.getMaxHP() * 0.10) / (actor.getMaxHP() * 0.01)
+                );
+                const maxOC = Math.max(0, actor.currentMana + Math.max(0, hpBuf));
+                if (maxOC === 0) {
+                    actor.pendingOvercharge = 0;
+                    executePlayerSkill(combat, skillKey);
+                } else {
+                    pendingOverchargeSkill = skillKey;
+                    overchargeSliderValue  = 0;
+                    overchargeSliderMax    = maxOC;
+                }
+                return combat.phase === 'defeat' ? 'defeat' : null;
+            }
             if (skillDef.attackType === 'aoe' || skillDef.attackType === 'self' || (skillDef.chargeUp && !actor.charging)) {
                 executePlayerSkill(combat, skillKey);
             } else {

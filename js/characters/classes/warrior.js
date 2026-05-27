@@ -3,9 +3,9 @@
 // ─── Base stats ───────────────────────────────────────────────────────────────
 
 const WARRIOR_BASE_STATS = {
-    hp:   120,  // Highest HP of any class — built to absorb punishment
+    hp:   12000,  // Highest HP of any class — built to absorb punishment
     def:    8,  // Solid armour, reliable damage reduction
-    dmg:   10,  // Strong baseline melee damage
+    dmg:   50,  // Strong baseline melee damage
     dex:    6,  // Moderate agility — occasional crits and dodges
     spd:    7,  // Average speed — acts mid-order in initiative
     int:    3,  // Low INT — small mana pool, not a spellcaster

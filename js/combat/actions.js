@@ -26,17 +26,11 @@ function basicAttack(attacker, defender, forceCrit, log, skipDodge = false) {
         }
     }
 
-    defender.takeDamage(result.damage, log);
+    // Retribution reflect handled in damageCalc.js
+    applyDamage(attacker, defender, result.damage, result.rawDamage, log);
 
     // Aggro: attacker generates threat equal to half the damage dealt
     if (result.damage > 0) attacker.aggro += Math.floor(result.damage * 0.5);
-
-    // Retribution: reflect a portion of raw pre-armor damage back at the attacker
-    if (defender.retributionReflect && hasStatusEffect(defender, 'retribution')) {
-        const reflected = Math.max(1, Math.floor(result.rawDamage * defender.retributionReflect));
-        attacker.takeDamage(reflected, log);
-        if (log) log(defender.name + "'s Retribution reflects " + reflected + ' damage back at ' + attacker.name + '!');
-    }
 
     if (log && attacker.equipment) applyOnHitPassives(attacker, defender, log);
     return result;
@@ -97,7 +91,8 @@ function useSkill(character, skillKey, target, log) {
         character.spendMana(cost);
     }
 
-    // Charge-up: set charging state and return — the actual effect fires on the next turn
+    // Charge-up: set charging state and return — the actual effect fires on the next turn.
+    // Handles all chargeUp: true skills generically, including singularity.
     if (skillDef.chargeUp) {
         character.charging = { abilityKey: skillKey, abilityName: levelData.name, turnsLeft: 2 };
         if (log) log(character.name + ' begins charging ' + levelData.name + '!');
@@ -108,6 +103,8 @@ function useSkill(character, skillKey, target, log) {
     // Execute the skill effect — pass log so effects can write to the combat log
     if (log) log(character.name + ' uses ' + levelData.name + '!');
     skillDef.effect(character, target, level, log);
+    // Safety net: zero pendingOvercharge in case the effect didn't consume it
+    if (character.pendingOvercharge) character.pendingOvercharge = 0;
     character.aggro += 10;
     return true;
 }

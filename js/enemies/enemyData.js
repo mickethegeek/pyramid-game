@@ -465,7 +465,154 @@ const ENEMY_DATA = {
     },
 
     // ─── Act bosses ───────────────────────────────────────────────────────────
-    // Bosses keep simple stats for now — personality and full action tables TBD
+
+    goremaw: {
+        name:             'Goremaw',
+        intro:            'The water stirs. The ground trembles. Goremaw, the Sunken King, rises from the deep.',
+        personality:      'aggressive',
+        passiveThreshold: null,
+        attackType:       'melee',
+        row:              'front',
+        tags:             ['boss', 'serpent'],
+        resistances:      { poison: 'immune', bleed: -0.50 },
+        weaknesses:       { fire: 1.35 },
+        armorShredDouble: true, // armor shred is doubly effective against Goremaw — checked in damageCalc.js
+        stats: { hp: 800, def: 25, dmg: 40, dex: 12, spd: 11, int: 10, luck: 8 },
+
+        // Phase tracking fields — initial values, mutated during combat
+        phase:       1,
+        coilActive:  false,  // true after Coil is used, consumed on next attack
+        submerging:  false,  // true during the submerge turn
+        turnCount:   0,      // incremented each time Goremaw takes a turn
+        bogRatBuff:  0,      // +5 DMG per living Bog Rat spawned by Swamp Summon
+
+        phase1Actions: [
+            { weight: 30, key: 'crushing_bite' },
+            { weight: 25, key: 'tail_sweep'    },
+            { weight: 25, key: 'venom_surge'   },
+            { weight: 20, key: 'coil'          },
+        ],
+
+        phase2Actions: [
+            { weight: 35, key: 'death_lunge' },
+            { weight: 25, key: 'swamp_surge' },
+            { weight: 25, key: 'thrash'      },
+            { weight: 15, key: 'swallow'     },
+        ],
+
+        actionDefs: {
+
+            crushing_bite: {
+                // Single target, physical. 40 base damage + bleed (10/turn, 3 turns). Target: highest aggro.
+                use(self, target, log, _combat) {
+                    const result = calculateDamage(self, target, 1.0, false, 'melee');
+                    target.takeDamage(result.damage, log);
+                    applyStatusEffect(target, 'bleed', log, { damagePerTurn: 10, duration: 3 });
+                    log(self.name + ' crushes ' + target.name + ' for ' + result.damage + ' damage! Bleed applied!');
+                },
+            },
+
+            tail_sweep: {
+                // AoE all party, physical. 25 damage each. 30% stun chance per target (duration 1).
+                use(self, _target, log, combat) {
+                    log(self.name + "'s Tail Sweep crashes through the party!");
+                    for (const member of combat.party.filter(m => m.isAlive())) {
+                        member.takeDamage(25, log);
+                        log(member.name + ' takes 25 damage!');
+                        if (Math.random() < 0.30) applyStatusEffect(member, 'stun', log, { duration: 1 });
+                    }
+                },
+            },
+
+            venom_surge: {
+                // AoE all party, magic. 20 damage each. Poison (8/turn, 3 turns) to all targets.
+                use(self, _target, log, combat) {
+                    log(self.name + "'s Venom Surge floods the chamber!");
+                    for (const member of combat.party.filter(m => m.isAlive())) {
+                        member.takeDamage(20, log);
+                        log(member.name + ' takes 20 venom damage!');
+                        applyStatusEffect(member, 'poison', log, { damagePerTurn: 8, duration: 3 });
+                    }
+                },
+            },
+
+            coil: {
+                // Self only. Drop DEF to 10 and set coilActive — next attack will be devastating.
+                use(self, _target, log, _combat) {
+                    self.baseStats.def = 10;
+                    self.coilActive    = true;
+                    log('Goremaw coils — DEF drops to 10 but its next strike will be devastating!');
+                },
+            },
+
+            death_lunge: {
+                // Single target, physical. 55 damage. Bleed (12/turn, 3 turns) + armor shred (-20 DEF, stacks). Target: highest aggro.
+                use(self, target, log, _combat) {
+                    target.takeDamage(55, log);
+                    applyStatusEffect(target, 'bleed', log, { damagePerTurn: 12, duration: 3 });
+                    // Armor shred: reduce DEF directly; stacks on repeated hits
+                    if (target.runBonus) {
+                        target.runBonus.def = Math.max(0, (target.runBonus.def || 0) - 20);
+                    } else {
+                        target.baseStats.def = Math.max(0, (target.baseStats.def || 0) - 20);
+                    }
+                    log(self.name + "'s Death Lunge hits " + target.name + ' for 55 damage! Bleed applied! Armor shredded (-20 DEF)!');
+                },
+            },
+
+            swamp_surge: {
+                // AoE all party, physical. 35 damage each. Poison (10/turn, 3 turns) to all targets.
+                use(self, _target, log, combat) {
+                    log(self.name + "'s Swamp Surge engulfs the party!");
+                    for (const member of combat.party.filter(m => m.isAlive())) {
+                        member.takeDamage(35, log);
+                        log(member.name + ' takes 35 damage!');
+                        applyStatusEffect(member, 'poison', log, { damagePerTurn: 10, duration: 3 });
+                    }
+                },
+            },
+
+            thrash: {
+                // Hits 3 random living party members for 30 each. Same target can be hit multiple times — rolled independently.
+                use(self, _target, log, combat) {
+                    log(self.name + ' thrashes wildly!');
+                    const alive = combat.party.filter(m => m.isAlive());
+                    for (let i = 0; i < 3; i++) {
+                        const hit = alive[Math.floor(Math.random() * alive.length)];
+                        if (hit) {
+                            hit.takeDamage(30, log);
+                            log(hit.name + ' takes 30 thrash damage!');
+                        }
+                    }
+                },
+            },
+
+            swallow: {
+                // Target lowest HP living party member. Instant KO if below 25% HP at execution time; else 55 damage.
+                use(self, target, log, _combat) {
+                    if (target.currentHP < target.getMaxHP() * 0.25) {
+                        target.currentHP = 0;
+                        log('Goremaw swallows ' + target.name + ' whole!');
+                    } else {
+                        target.takeDamage(55, log);
+                        log('Goremaw cannot swallow ' + target.name + ' whole — they slip free! (55 damage)');
+                    }
+                },
+            },
+        },
+
+        passive: {
+            swampSummonInterval: 3,  // every 3 turns in phase 1, spawn 2 Bog Rats. Swamp Summon trigger checked in enemyAI.js.
+            phase2Regen:         20, // Goremaw regens 20 HP per turn in phase 2, capped at max HP. Phase 2 regen applied in combat.js onRoundEnd.
+            bogRatDmgBonus:       5, // per living Bog Rat spawned by Swamp Summon. bogRatBuff tracked and applied in enemyAI.js.
+        },
+
+        onDeath(self, combat, log) {
+            const rats = combat.enemies.filter(e => e.key === 'bogRat' && e.spawnedByGoremaw && e.isAlive());
+            for (const rat of rats) rat.currentHP = 0;
+            if (rats.length) log('Goremaw falls — the Bog Rats scatter into the swamp!');
+        },
+    },
 
     sandPharaoh: {
         name:             'Sand Pharaoh',
@@ -557,7 +704,7 @@ const ENEMY_SPAWN_GROUPS = {
     },
     // Boss rooms always spawn exactly one boss — key indexed by act number
     boss: {
-        1: ['sandPharaoh'],
+        1: ['goremaw'],
         2: ['pyramidColossus'],
         3: ['theApex'],
     },

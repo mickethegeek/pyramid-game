@@ -189,15 +189,27 @@ const STATUS_EFFECTS = {
         },
     },
 
-    // Arcane Burn: DoT that bypasses DEF entirely — can coexist with poison simultaneously
+    // Arcane Burn: magic DoT that bypasses DEF entirely.
+    // instance.damagePerTurn — damage written directly to HP each tick (no armor, no dodge).
+    // instance.duration      — overrides the default duration when set by the applying skill.
     arcane_burn: {
         name:     'Arcane Burn',
         color:    '#a78bfa',
         duration: 3,
+        onApply(combatant, _log, instance) {
+            // Allow the applying skill to set a custom duration per level
+            if (instance.duration !== undefined) instance.turnsLeft = instance.duration;
+            // Store damage on the combatant; overwritten if a higher-level stack is applied later
+            combatant.arcane_burnDamage = instance.damagePerTurn || 0;
+        },
         onTick(combatant, _effect, log) {
-            // takeDamage applies HP loss directly with no DEF reduction
-            combatant.takeDamage(4);
-            log(combatant.name + ' takes 4 arcane burn damage (ignores armor)!');
+            // Bypass applyDamage — write directly to HP so DEF is never subtracted
+            const damage = combatant.arcane_burnDamage || 0;
+            combatant.currentHP = Math.max(0, combatant.currentHP - damage);
+            log(combatant.name + ' suffers ' + damage + ' Arcane Burn damage!');
+        },
+        onExpire(combatant, _log) {
+            combatant.arcane_burnDamage = 0;
         },
     },
 
@@ -372,24 +384,54 @@ const STATUS_EFFECTS = {
         },
     },
 
-    // Retribution: reflects 20% of raw incoming damage back at the attacker before armor
+    // Retribution: reflects a configurable fraction of raw incoming damage back at the attacker.
+    // instance.reflectFraction  — how much to reflect (default 0.20)
+    // instance.armorPierce      — if true the reflected hit bypasses attacker DEF
+    // instance.martyrs          — if true, reflect surges to 100% when carrier drops below 25% HP
     retribution: {
         name:     'Retribution',
         color:    '#f59e0b',
         duration: 3,
-        onApply(combatant, log) {
-            // Store the reflect fraction on the combatant so basicAttack can read it
-            combatant.retributionReflect = 0.20;
-            log(combatant.name + ' crackles with Retribution! 20% of incoming damage is reflected!');
+        onApply(combatant, _log, instance) {
+            combatant.retributionReflect    = instance.reflectFraction ?? 0.20;
+            combatant.retributionArmorPierce = instance.armorPierce   ?? false;
+            combatant.retributionMartyrs    = instance.martyrs        ?? false;
+            _log(combatant.name + ' crackles with Retribution! ' +
+                Math.round((instance.reflectFraction ?? 0.20) * 100) + '% of incoming damage is reflected!');
         },
         onTick(_combatant, _effect, _log) {
-            // Reflection is handled in basicAttack (actions.js) on each incoming hit
+            // Reflection is handled in applyDamage (damageCalc.js) on each incoming hit
         },
         onExpire(combatant, log) {
             if (lastStack(combatant, 'retribution')) {
-                combatant.retributionReflect = 0;
+                combatant.retributionReflect     = 0;
+                combatant.retributionArmorPierce = false;
+                combatant.retributionMartyrs     = false;
                 log(combatant.name + "'s Retribution fades.");
             }
+        },
+    },
+
+    // Temp shield: absorbs incoming damage using a temp HP pool until depleted.
+    // instance.amount          — temp HP to add
+    // instance.damageReduction — flat DR applied while shield holds (default 0)
+    // instance.fortress        — if true, stuns the attacker when the shield breaks
+    // Duration is effectively permanent — removed manually in damageCalc.js when tempHP hits 0.
+    temp_shield: {
+        name:     'Shield',
+        color:    '#60a5fa',
+        duration: Infinity,
+        onApply(combatant, log, instance) {
+            combatant.tempHP             = (combatant.tempHP || 0) + instance.amount;
+            combatant.shieldDamageReduction = instance.damageReduction ?? 0;
+            combatant.shieldFortress     = instance.fortress ?? false;
+            log(combatant.name + ' is shielded for ' + instance.amount + ' temp HP!');
+        },
+        onTick(_combatant, _effect, _log) {},
+        onExpire(combatant, _log) {
+            combatant.tempHP             = 0;
+            combatant.shieldDamageReduction = 0;
+            combatant.shieldFortress     = false;
         },
     },
 };

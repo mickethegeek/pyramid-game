@@ -64,9 +64,10 @@ function getAlivePartyMembers(combat) {
     return combat.party.filter(m => m.isAlive());
 }
 
-// Return all enemies who are still alive
+// Return all enemies who are still alive and targetable
+// Enemies with untargetable === true (e.g. Goremaw while submerging) are excluded
 function getAliveEnemies(combat) {
-    return combat.enemies.filter(e => e.isAlive());
+    return combat.enemies.filter(e => e.isAlive() && !e.untargetable);
 }
 
 // Return true if every party member has been defeated
@@ -94,10 +95,11 @@ function nextTurn(combat) {
     const current = combat.queue[combat.turnIndex];
     combat.phase  = current.isPlayer ? 'player_turn' : 'enemy_turn';
 
-    // Count turns; when a full queue cycle completes, decay all aggro by 5%
+    // Count turns; when a full queue cycle completes, run all round-end effects
     combat.turnsSinceDecay = (combat.turnsSinceDecay || 0) + 1;
     if (combat.turnsSinceDecay >= total) {
         decayAggro(combat);
+        processRoundEnd(combat);
         combat.turnsSinceDecay = 0;
     }
 
@@ -116,6 +118,83 @@ function decayAggro(combat) {
     for (const slot of combat.queue) {
         const c = slot.combatant;
         if (c.isAlive()) c.aggro = Math.max(0, Math.floor(c.aggro * 0.95));
+    }
+}
+
+// Tick all per-round party buffs at the end of every full initiative cycle.
+// Handles Sacred Aura heal-over-time and the shared damageReduction expiry.
+function processRoundEnd(combat) {
+    const log = msg => addToLog(combat, msg);
+
+    for (const member of combat.party) {
+        if (!member.isAlive()) continue;
+
+        // ── Sacred Aura heal tick ─────────────────────────────────────────────
+        if ((member.sacredAuraTurns || 0) > 0) {
+            // Heal this party member
+            member.currentHP = Math.min(member.getMaxHP(), member.currentHP + member.sacredAuraHeal);
+            log(member.name + ' is healed for ' + member.sacredAuraHeal + ' HP by Sacred Aura!');
+
+            // Aggro goes to the Paladin who cast Sacred Aura (identified by the 'sacred_aura' effect)
+            const caster = state.party.find(
+                m => m.activeEffects && m.activeEffects.some(e => e.key === 'sacred_aura')
+            );
+            if (caster) caster.aggro += Math.floor(member.sacredAuraHeal * 0.8);
+
+            member.sacredAuraTurns--;
+
+            // Sacred Aura expired — clean up; only zero DR if its own timer is also done
+            if (member.sacredAuraTurns === 0) {
+                member.sacredAuraHeal = 0;
+                if ((member.damageReductionTurns || 0) === 0) {
+                    member.damageReduction = 0;
+                }
+            }
+        }
+
+        // ── Damage reduction expiry ───────────────────────────────────────────
+        if ((member.damageReductionTurns || 0) > 0) {
+            member.damageReductionTurns--;
+            if (member.damageReductionTurns === 0) {
+                member.damageReduction = 0;
+            }
+        }
+    }
+
+    // ── Goremaw boss round-end hooks ──────────────────────────────────────────
+    const goremaw = combat.enemies.find(e => e.key === 'goremaw' && e.isAlive());
+    if (goremaw) {
+        // Bog Rat death tracking: recalculate bogRatBuff from living Goremaw-spawned rats only.
+        // Only Goremaw-spawned rats count toward bogRatBuff.
+        const livingSpawnedRats = combat.enemies.filter(
+            e => e.key === 'bogRat' && e.spawnedByGoremaw && e.isAlive()
+        );
+        goremaw.bogRatBuff = livingSpawnedRats.length * goremaw.passive.bogRatDmgBonus;
+
+        // Phase 2 regen: Goremaw heals every round while in phase 2.
+        // Phase 2 regen applied in combat.js onRoundEnd.
+        if (goremaw.phase === 2) {
+            goremaw.currentHP = Math.min(goremaw.getMaxHP(), goremaw.currentHP + goremaw.passive.phase2Regen);
+            log('Goremaw regenerates ' + goremaw.passive.phase2Regen + ' HP from the swamp!');
+        }
+    }
+
+    // Added in Prompt 19c — Herald passive: while the Herald is alive, every non-herald familiar's
+    // onDeath effect echoes at the end of each round. The familiar itself is NOT removed — this is
+    // a passive trigger only. herald's template guards heraldActive; we also verify the Herald unit
+    // is still alive so the echo stops the turn it dies.
+    if (state.heraldActive) {
+        const heraldAlive = (state.activeFamiliars || []).some(
+            u => u.familiarKey === 'herald' && u.currentHP > 0
+        );
+        if (heraldAlive) {
+            for (const unit of (state.activeFamiliars || [])) {
+                if (unit.familiarKey !== 'herald' && unit.currentHP > 0) {
+                    log('The Herald pulses — ' + unit.name + "'s death echo fires!");
+                    unit.onDeath(log);   // fires template effect without cleanup
+                }
+            }
+        }
     }
 }
 
@@ -178,6 +257,101 @@ function startOfTurn(combat, combatant) {
 function injectFamiliarIntoQueue(combat, familiar) {
     const slot = { combatant: familiar, isPlayer: false, isFamiliar: true };
     combat.queue.splice(combat.turnIndex + 1, 0, slot);
+}
+
+// Added in Prompt 19c — Centralised familiar death cleanup.
+// Call AFTER nextTurn() has advanced the index past the dead unit so queue removal is safe.
+// Handles: onDeath hook, Dark Covenant double-fire, state.activeFamiliars pruning,
+// queue slot removal with turnIndex correction, bat aura clear, legacy activeFamiliar update.
+// Herald's template.onDeath already calls summonFamiliarGroup(dog+crow) and clears heraldActive.
+function handleFamiliarDeath(unit, combat, log) {
+    // 1. Fire the unit's onDeath hook (bridges to template.onDeath via this.summoner)
+    unit.onDeath(log);
+
+    // 2. Dark Covenant: if summoner's bloodPactBonus carries onDeathDouble, fire the hook a second time
+    // Added in Prompt 19c
+    const summoner = state.party && state.party.find(m => m.className === 'summoner' && m.isAlive());
+    if (summoner && summoner.bloodPactBonus && summoner.bloodPactBonus.onDeathDouble) {
+        log(unit.name + "'s death effect echoes (Dark Covenant)!");
+        unit.onDeath(log);
+    }
+
+    // 3. Remove from state.activeFamiliars
+    // Added in Prompt 19c
+    if (state.activeFamiliars) {
+        state.activeFamiliars = state.activeFamiliars.filter(u => u !== unit);
+    }
+
+    // 4. Remove the unit's slot from the initiative queue and correct turnIndex.
+    // We call this AFTER nextTurn() so the slot is now behind the current index.
+    // If the removed slot was before turnIndex, decrement to compensate for the shift.
+    // Added in Prompt 19c
+    const slotIdx = combat.queue.findIndex(s => s.combatant === unit);
+    if (slotIdx >= 0) {
+        combat.queue.splice(slotIdx, 1);
+        if (slotIdx < combat.turnIndex) {
+            combat.turnIndex = Math.max(0, combat.turnIndex - 1);
+        }
+        // Guard: turnIndex must stay in bounds after any insertions/removals
+        if (combat.turnIndex >= combat.queue.length && combat.queue.length > 0) {
+            combat.turnIndex = combat.queue.length - 1;
+        }
+    }
+
+    // 5. Clear bat DEF-reduction aura if no bats remain alive
+    // Added in Prompt 19c
+    if (state.batAuraActive) {
+        const aliveBats = (state.activeFamiliars || []).filter(
+            u => u.familiarKey === 'bat' && u.currentHP > 0
+        );
+        if (aliveBats.length === 0) state.batAuraActive = false;
+    }
+
+    // 6. Keep the legacy single-familiar reference in sync (non-herald preferred)
+    state.activeFamiliar = (state.activeFamiliars || []).find(
+        u => u.familiarKey !== 'herald' && u.currentHP > 0
+    ) || (state.activeFamiliars || []).find(u => u.currentHP > 0) || null;
+}
+
+// Added in Prompt 19c — Complete recall of all active familiars for a given group key.
+// Fires each unit's onRecall hook (bat template clears batAuraActive; herald clears heraldActive),
+// purges units from state.activeFamiliars and the initiative queue.
+// Called by skillData effects; also available as a shared helper for future recall sites.
+function recallFamiliarGroup(familiarKey, summoner, combat, log) {
+    const group = (state.activeFamiliars || []).filter(u => u.familiarKey === familiarKey);
+    if (!group.length) return;
+
+    // Fire onRecall on each unit (the first call sets group-level flags via the template)
+    // Added in Prompt 19c
+    for (const unit of group) {
+        unit.onRecall(log);
+    }
+
+    // Remove group from state
+    // Added in Prompt 19c
+    state.activeFamiliars = (state.activeFamiliars || []).filter(u => u.familiarKey !== familiarKey);
+
+    // Remove group slots from queue (iterate backwards to avoid index drift)
+    // Added in Prompt 19c
+    if (combat && combat.queue) {
+        const keys = new Set(group.map(u => u));
+        for (let i = combat.queue.length - 1; i >= 0; i--) {
+            if (keys.has(combat.queue[i].combatant)) {
+                combat.queue.splice(i, 1);
+                if (i < combat.turnIndex) combat.turnIndex = Math.max(0, combat.turnIndex - 1);
+            }
+        }
+    }
+
+    // Ensure batAuraActive is cleared if this was a bat recall (template should have done it,
+    // but guard here in case the template was not invoked correctly)
+    // Added in Prompt 19c
+    if (familiarKey === 'bat') state.batAuraActive = false;
+
+    // Update legacy reference
+    state.activeFamiliar = (state.activeFamiliars || []).find(
+        u => u.familiarKey !== 'herald' && u.currentHP > 0
+    ) || (state.activeFamiliars || []).find(u => u.currentHP > 0) || null;
 }
 
 // Execute a familiar's autonomous turn — attacks a random alive enemy
@@ -299,10 +473,11 @@ function executeChargeUpTick(combat) {
         addToLog(combat, actor.name + ' unleashes ' + ability.name + '!');
         ability.use(actor, target, msg => addToLog(combat, msg), combat);
     } else {
-        // Skill-based charge-up: fire through the skill's effect() with log callback
-        const level = actor.skillLevels[charging.abilityKey] || 1;
+        // Skill-based charge-up: AoE skills receive all alive enemies; single-target gets selected enemy
+        const level       = actor.skillLevels[charging.abilityKey] || 1;
+        const effectTarget = skillDef.attackType === 'aoe' ? getAliveEnemies(combat) : target;
         addToLog(combat, actor.name + ' unleashes ' + skillDef.levels[level].name + '!');
-        skillDef.effect(actor, target, level, msg => addToLog(combat, msg));
+        skillDef.effect(actor, effectTarget, level, msg => addToLog(combat, msg));
     }
     actor.aggro += 10;
 
@@ -329,10 +504,13 @@ function executeChargeUpTick(combat) {
 // Returns true if combat has ended (caller should return immediately).
 function checkCombatEndAfterTick(combat, actor) {
     if (!actor.isAlive()) {
-        // Familiar death — call its hook, clear state, then continue combat normally
+        // Added in Prompt 19c — Familiar death: advance the turn FIRST so turnIndex is past
+        // the dead slot, then let handleFamiliarDeath clean up state and the queue safely.
+        // Herald's template.onDeath spawns Dog + Crow via summonFamiliarGroup automatically.
         if (actor.isFamiliar) {
-            actor.onDeath(msg => addToLog(combat, msg));
+            const log = msg => addToLog(combat, msg);
             nextTurn(combat);
+            handleFamiliarDeath(actor, combat, log);
             if (combat.phase === 'enemy_turn') scheduleEnemyTurn(combat);
             return true;
         }
@@ -434,7 +612,7 @@ function executePlayerSkill(combat, skillKey) {
     } else if (skillDef.attackType === 'self') {
         target = actor;
     } else {
-        target = (combat.selectedTarget && combat.selectedTarget.isAlive())
+        target = (combat.selectedTarget && combat.selectedTarget.isAlive() && !combat.selectedTarget.untargetable)
             ? combat.selectedTarget
             : getAliveEnemies(combat)[0];
         combat.selectedTarget = null;
@@ -486,8 +664,8 @@ function executePlayerAttack(combat) {
         return;
     }
 
-    // Use the player's selected target if still alive, otherwise auto-target first alive enemy
-    const target = (combat.selectedTarget && combat.selectedTarget.isAlive())
+    // Use the player's selected target if still alive and targetable, otherwise auto-target first alive enemy
+    const target = (combat.selectedTarget && combat.selectedTarget.isAlive() && !combat.selectedTarget.untargetable)
         ? combat.selectedTarget
         : getAliveEnemies(combat)[0];
     combat.selectedTarget = null;   // clear selection after acting
@@ -592,8 +770,8 @@ function executePlayerAbility(combat, abilityIndex) {
         return;
     }
 
-    // Use the player's selected target if still alive, otherwise auto-target first alive enemy
-    const target = (combat.selectedTarget && combat.selectedTarget.isAlive())
+    // Use the player's selected target if still alive and targetable, otherwise auto-target first alive enemy
+    const target = (combat.selectedTarget && combat.selectedTarget.isAlive() && !combat.selectedTarget.untargetable)
         ? combat.selectedTarget
         : getAliveEnemies(combat)[0];
     combat.selectedTarget = null;   // clear selection after acting
@@ -788,6 +966,9 @@ function executeEnemyTurn(combat) {
 
     // Familiar slots sit in the enemy-phase queue but act as autonomous allies
     if (actor.isFamiliar) return executeFamiliarTurn(combat);
+
+    // Goremaw has its own full turn handler — delegates all phase/submerge/summon logic
+    if (actor.key === 'goremaw') { executeGoremawTurn(combat); return; }
 
     // Count every turn this enemy takes (before stun check — stunned turns still count)
     actor.turnCount++;

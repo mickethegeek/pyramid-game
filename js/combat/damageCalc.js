@@ -53,6 +53,69 @@ function calculateDamage(attacker, defender, abilityMultiplier, forceCrit, attac
     return { damage: Math.max(1, damage), isCrit, rawDamage: Math.floor(raw) };
 }
 
+// Apply a pre-calculated damage value to a target, handling temp-HP shields and Retribution.
+// attacker: the combatant dealing the hit (needed for Retribution reflect and Fortress stun).
+// finalDamage: post-crit, post-armor value from calculateDamage (or manually computed).
+// rawDamage: pre-armor value — used as the base for Retribution reflection.
+// log: combat log callback.
+function applyDamage(attacker, target, finalDamage, rawDamage, log) {
+
+    // ── Temp-HP shield drain ──────────────────────────────────────────────────
+    if ((target.tempHP || 0) > 0) {
+        // Apply shield's own damage reduction while the buffer is intact
+        if (target.shieldDamageReduction) {
+            finalDamage = Math.round(finalDamage * (1 - target.shieldDamageReduction));
+        }
+
+        const absorbed = Math.min(target.tempHP, finalDamage);
+        target.tempHP  -= absorbed;
+        finalDamage    -= absorbed;
+
+        if (log && absorbed > 0) {
+            log(target.name + "'s shield absorbs " + absorbed + ' damage! (' + target.tempHP + ' temp HP remaining)');
+        }
+
+        // Shield broke — trigger Fortress stun and clean up state
+        if (target.tempHP <= 0) {
+            if (target.shieldFortress && attacker) {
+                applyStatusEffect(attacker, 'stun', log, { turnsLeft: 1 });
+                if (log) log('Fortress shatters — ' + attacker.name + ' is stunned!');
+            }
+            if (target.activeEffects) {
+                target.activeEffects = target.activeEffects.filter(e => e.key !== 'temp_shield');
+            }
+            target.shieldDamageReduction = 0;
+            target.shieldFortress        = false;
+        }
+    }
+
+    // ── Apply remaining damage to HP ─────────────────────────────────────────
+    target.takeDamage(finalDamage, log);
+
+    // ── Retribution reflect ───────────────────────────────────────────────────
+    if ((target.retributionReflect || 0) > 0 && attacker) {
+        // Martyr's surge: dropping below 25% HP flips reflect to 100% armor-piercing
+        if (target.retributionMartyrs && target.currentHP < target.getMaxHP() * 0.25) {
+            target.retributionReflect     = 1.0;
+            target.retributionArmorPierce = true;
+            if (log) log(target.name + "'s Martyr's Resolve surges — 100% reflect!");
+        }
+
+        let reflectDamage = Math.round(rawDamage * target.retributionReflect);
+
+        // Armor-reduced reflect: use the same DEF formula as calculateDamage
+        if (!target.retributionArmorPierce) {
+            const defMult      = 1.0 + (attacker.armorDebuff || 0);
+            const effectiveDef = Math.max(0, attacker.getStat('def') * defMult);
+            reflectDamage      = Math.max(1, Math.floor(reflectDamage - effectiveDef));
+        }
+
+        reflectDamage      = Math.max(1, reflectDamage);
+        attacker.currentHP = Math.max(0, attacker.currentHP - reflectDamage);
+        if (log) log(target.name + "'s Retribution reflects " + reflectDamage + ' damage at ' + attacker.name + '!');
+    }
+}
+
 // Roll whether the defender dodges an incoming attack based on attack type and SPD.
 // 'magic': never dodged. 'single': floor(SPD/4)% chance.
 // 'aoe': floor(SPD/8)% chance, rolled independently per target.

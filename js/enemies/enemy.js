@@ -142,6 +142,20 @@ function createEnemy(key, actNumber) {
     const rowPref = data.row || 'front';
     enemy.row = (rowPref === 'random') ? (Math.random() < 0.5 ? 'front' : 'back') : rowPref;
 
+    // Copy Goremaw's boss-specific fields onto the instance so they are instance-scoped
+    // (phase state must live on the instance, not the shared ENEMY_DATA object)
+    if (key === 'goremaw') {
+        enemy.phase            = data.phase;
+        enemy.coilActive       = data.coilActive;
+        enemy.submerging       = data.submerging;
+        enemy.bogRatBuff       = data.bogRatBuff;
+        enemy.phase1Actions    = data.phase1Actions;
+        enemy.phase2Actions    = data.phase2Actions;
+        enemy.actionDefs       = data.actionDefs;
+        enemy.armorShredDouble = data.armorShredDouble;
+        enemy.passive          = data.passive;
+    }
+
     const mult = ACT_MULTIPLIERS[actNumber] || 1.0;
     if (mult !== 1.0) {
         enemy.baseStats.hp  = Math.round(enemy.baseStats.hp  * mult);
